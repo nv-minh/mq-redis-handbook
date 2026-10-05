@@ -13,10 +13,15 @@ Nguồn: https://github.com/nats-io/nats.js
 Client Go: `github.com/nats-io/nats.go` v1.54.0 phát hành 2026-09-18, yêu cầu Go tối thiểu 1.26, và CI chạy với nats-server v2.15.0.
 Nguồn: https://github.com/nats-io/nats.go/releases/tag/v1.54.0
 Thay đổi gần đây liên quan lab:
-- Từ server 2.15: mỗi stream mặc định giới hạn 1000 consumer nếu không đặt `max_consumers` trong stream config hoặc account limits (đặt `-1` để tắt giới hạn, hoặc dùng `default_max_consumers`). Giới hạn này chỉ chặn tạo consumer mới, không xóa consumer cũ. Nguồn: https://github.com/nats-io/nats-server/releases/tag/v2.15.0
-- Từ server 2.15: `sync_interval: always` cho replicated stream chỉ sync WAL, không sync các lớp stream phía trên; R1 stream không bị ảnh hưởng. Nguồn: https://github.com/nats-io/nats-server/releases/tag/v2.15.0
-- nats.go v1.54.0 sửa lỗi `Messages()` iterator im lặng sau reconnect, thêm các trường info của server 2.15. Nguồn: https://github.com/nats-io/nats.go/releases/tag/v1.54.0
-- nats.js v3.4.0 sửa lỗi push consumer bị kẹt ở heartbeat, thêm `resetConsumer()` (cần server 2.14+), message schedules (cần server 2.14+), `getServers()` và `setServers()`. Nguồn: https://github.com/nats-io/nats.js/releases/tag/v3.4.0
+- Từ server 2.15: mỗi stream mặc định giới hạn 1000 consumer nếu không đặt `max_consumers` trong stream config hoặc account limits (đặt `-1` để tắt giới hạn, hoặc dùng `default_max_consumers`).
+  Giới hạn này chỉ chặn tạo consumer mới, không xóa consumer cũ.
+  Nguồn: https://github.com/nats-io/nats-server/releases/tag/v2.15.0
+- Từ server 2.15: `sync_interval: always` cho replicated stream chỉ sync WAL, không sync các lớp stream phía trên; R1 stream không bị ảnh hưởng.
+  Nguồn: https://github.com/nats-io/nats-server/releases/tag/v2.15.0
+- nats.go v1.54.0 sửa lỗi `Messages()` iterator im lặng sau reconnect, thêm các trường info của server 2.15.
+  Nguồn: https://github.com/nats-io/nats.go/releases/tag/v1.54.0
+- nats.js v3.4.0 sửa lỗi push consumer bị kẹt ở heartbeat, thêm `resetConsumer()` (cần server 2.14+), message schedules (cần server 2.14+), `getServers()` và `setServers()`.
+  Nguồn: https://github.com/nats-io/nats.js/releases/tag/v3.4.0
 
 ## Khái niệm bắt buộc
 
@@ -50,7 +55,8 @@ Redelivery không giữ thứ tự stream: consumer có nhiều message in fligh
 Nguồn: https://docs.nats.io/learn/jetstream/delivery-and-acknowledgment
 Ack policy: `explicit` ack từng message; `none` không cần ack (không pending list, không AckWait, không redelivery); `all` một ack xác nhận cả các message trước đó (chỉ hợp với xử lý tuần tự, vì ack message 10 cũng xóa message 7 đang chờ giao lại); `flow_control` là giá trị thứ tư dành cho push consumer nội bộ của mirror và source.
 Nguồn: https://docs.nats.io/learn/jetstream/acknowledgment
-Ack thường là fire-and-forget; nếu ack bị mất thì hết AckWait message bị giao lại. Double ack (`ackAck()` ở JS, `DoubleAck(ctx)` ở Go) chờ server xác nhận đã ghi ack, tốn thêm một round-trip.
+Ack thường là fire-and-forget; nếu ack bị mất thì hết AckWait message bị giao lại.
+Double ack (`ackAck()` ở JS, `DoubleAck(ctx)` ở Go) chờ server xác nhận đã ghi ack, tốn thêm một round-trip.
 Nguồn: https://docs.nats.io/learn/jetstream/delivery-and-acknowledgment
 
 ### JetStream consumer: pull, durable, ephemeral, deliver policy, resume
@@ -63,16 +69,20 @@ Nguồn: https://docs.nats.io/learn/jetstream/reading-back
 Durable không bị tự dọn trừ khi đặt `InactiveThreshold`; consumer được coi là inactive khi server không nhận pull request nào (pull consumer) hoặc không phát hiện interest trên deliver subject (push consumer), không phải khi hết message để giao.
 Với consumer chỉ đặt `Name` (không `Durable`), nats.go v1.54.0 ghi mặc định `InactiveThreshold` của server là 5 giây trong doc comment của `ConsumerConfig`.
 Nguồn: https://github.com/nats-io/nats.go/blob/v1.54.0/jetstream/consumer_config.go
-Pull consumer: client chủ động xin message. Fetch xin một batch tối đa N message và trả về khi batch đầy hoặc hết timeout (`expires`); Consume tạo luồng liên tục, thư viện tự gửi pull request ở background và gọi handler cho từng message.
+Pull consumer: client chủ động xin message.
+Fetch xin một batch tối đa N message và trả về khi batch đầy hoặc hết timeout (`expires`); Consume tạo luồng liên tục, thư viện tự gửi pull request ở background và gọi handler cho từng message.
 Hai trường của một pull request: `batch` (số message tối đa) và `expires` (thời gian server giữ request chờ message); fetch rỗng là bình thường (server trả 408 Request Timeout, hoặc 404 No Messages với no-wait), worker không được coi đó là lỗi.
 Nguồn: https://docs.nats.io/learn/jetstream/pull-consumers
-Redelivery sau AckWait với pull consumer (đã kiểm tra): cơ chế giống nhau cho mọi consumer; message chưa ack hết AckWait được giao lại cho một reader bất kỳ của cùng consumer (có thể là worker khác), và bản giao lại đi theo thứ tự giao chứ không theo thứ tự stream nên có thể đến sau message có sequence cao hơn. Ví dụ trong docs dùng chính pull consumer `shipping`, sau 30 giây (mặc định) pull lại thì nhận message đó với `tries: 2`.
+Redelivery sau AckWait với pull consumer (đã kiểm tra): cơ chế giống nhau cho mọi consumer; message chưa ack hết AckWait được giao lại cho một reader bất kỳ của cùng consumer (có thể là worker khác), và bản giao lại đi theo thứ tự giao chứ không theo thứ tự stream nên có thể đến sau message có sequence cao hơn.
+Ví dụ trong docs dùng chính pull consumer `shipping`, sau 30 giây (mặc định) pull lại thì nhận message đó với `tries: 2`.
 Nguồn: https://docs.nats.io/learn/jetstream/delivery-and-acknowledgment
 MaxAckPending (mặc định 1000, `-1` là không giới hạn) là số message tối đa đang chờ ack mà consumer giao ra trước khi dừng chờ; đặt thấp hơn batch size thì throughput bị chặn; mọi worker dùng chung consumer chia sẻ chung một giới hạn này.
 Nguồn: https://docs.nats.io/learn/jetstream/pull-consumers và https://github.com/nats-io/nats.go/blob/v1.54.0/jetstream/consumer_config.go
 Deliver policy (chọn một lần khi tạo, không sửa được; server báo `deliver policy can not be updated`): `all` (mặc định, từ message đầu tiên), `last` (từ message mới nhất rồi tiếp tục live), `new` (chỉ message đến sau khi tạo consumer), `by_start_sequence` (dùng `opt_start_seq`), `by_start_time` (dùng `opt_start_time`), `last_per_subject` (message mới nhất cho mỗi subject khớp, nền tảng của KV watch).
 Nguồn: https://docs.nats.io/learn/jetstream/policies
-By start time (đã kiểm tra): chọn message đầu tiên có timestamp >= StartTime, theo comment trong source `DeliverByStartTime will select the first messsage with a timestamp >= to StartTime` và server gọi `store.GetSeqFromTime(OptStartTime)` để đổi thời điểm thành sequence bắt đầu. Timestamp ở đây là thời điểm server lưu message. Hành vi khi không có message nào >= StartTime: chưa xác minh bằng source (suy ra consumer bắt đầu ở message tương lai, chưa kiểm chứng).
+By start time (đã kiểm tra): chọn message đầu tiên có timestamp >= StartTime, theo comment trong source `DeliverByStartTime will select the first messsage with a timestamp >= to StartTime` và server gọi `store.GetSeqFromTime(OptStartTime)` để đổi thời điểm thành sequence bắt đầu.
+Timestamp ở đây là thời điểm server lưu message.
+Hành vi khi không có message nào >= StartTime: chưa xác minh bằng source (suy ra consumer bắt đầu ở message tương lai, chưa kiểm chứng).
 Nguồn: https://github.com/nats-io/nats-server/blob/v2.15.0/server/consumer.go
 `new` chỉ định nghĩa điểm bắt đầu lịch sử của consumer; durable tạo bằng `new` vẫn lưu vị trí, nên sau restart client đọc tiếp từ vị trí đã lưu (kể cả backlog tích lũy), không nhảy tới live.
 Nguồn: https://docs.nats.io/learn/jetstream/policies
@@ -113,7 +123,9 @@ Nguồn: https://docs.nats.io/learn/core-nats/request-reply
 Queue group là tập subscriber cùng subject và cùng tên group; với mỗi message server chọn đúng một member của group và chỉ giao cho member đó.
 Server chọn ngẫu nhiên (random index) chứ không round-robin, nên có thể lệch trong vài message; membership động, không cần cấu hình server.
 Nguồn: https://docs.nats.io/learn/core-nats/queue-groups
-Queue group có đảm bảo đúng một member nhận mỗi message không (đã kiểm tra): chỉ trong phạm vi một group, mỗi message tới đúng một member được chọn ("not zero and not two" là mục tiêu thiết kế). Nhưng đó là at-most-once: nếu member được chọn chết sau khi nhận thì message mất và server không giao lại cho member khác; vì vậy không phải đảm bảo xử lý đúng một lần. Nhiều group khác tên trên cùng subject mỗi group nhận một bản, và subscriber thường (không queue) vẫn nhận mọi message.
+Queue group có đảm bảo đúng một member nhận mỗi message không (đã kiểm tra): chỉ trong phạm vi một group, mỗi message tới đúng một member được chọn ("not zero and not two" là mục tiêu thiết kế).
+Nhưng đó là at-most-once: nếu member được chọn chết sau khi nhận thì message mất và server không giao lại cho member khác; vì vậy không phải đảm bảo xử lý đúng một lần.
+Nhiều group khác tên trên cùng subject mỗi group nhận một bản, và subscriber thường (không queue) vẫn nhận mọi message.
 Nguồn: https://docs.nats.io/learn/core-nats/queue-groups
 Group chỉ chia tải trong phạm vi một subject (sau khi khớp subject mới chọn member); gõ sai tên group tạo ra group thứ hai nên mỗi message bị xử lý hai lần.
 Nguồn: https://docs.nats.io/learn/core-nats/queue-groups
@@ -143,7 +155,8 @@ Subject không có stream nào bắt thì publish JetStream lỗi ngay (no respo
 Nguồn: https://docs.nats.io/learn/jetstream/publishing
 Dedup (đã kiểm tra): server từ chối lưu hai lần cùng `Nats-Msg-Id` trong duplicate window của stream; mặc định `Duplicate Window` là 2 phút (`2m0s` trong `nats stream info`); publish lặp trả PubAck cùng sequence ban đầu với `duplicate: true`; retry sau hơn 2 phút sẽ lưu bản thứ hai.
 Nguồn: https://docs.nats.io/learn/jetstream/publishing và https://docs.nats.io/learn/jetstream/your-first-stream
-Nên dùng `Nats-Msg-Id` mà producer tính lại được (order id, request id, hash payload). Cửa sổ dedup là cấu hình của stream chứ không phải header.
+Nên dùng `Nats-Msg-Id` mà producer tính lại được (order id, request id, hash payload).
+Cửa sổ dedup là cấu hình của stream chứ không phải header.
 Nguồn: https://docs.nats.io/learn/jetstream/publishing
 Async publish chồng các round trip để tăng throughput nhưng phải kiểm tra từng PubAck; retry muộn có thể đổi thứ tự (message 3 retry nằm sau 4, 5, 6); dùng `Nats-Expected-Last-Subject-Sequence` để retry sai thứ tự bị từ chối.
 Atomic batch publish (`AllowAtomicPublish`, từ server 2.12): mặc định tối đa 1000 message mỗi batch và 50 batch đồng thời; batch im lặng 10 giây bị bỏ và chỉ có advisory `stream_batch_abandoned`.
@@ -155,8 +168,10 @@ Nguồn: https://docs.nats.io/learn/jetstream/your-first-stream
 
 TypeScript (`@nats-io/transport-node` 3.4.0 + `@nats-io/jetstream` 3.4.0, kiểm tra bằng `npm i` và đọc file `.d.ts`):
 - `connect` import từ `@nats-io/transport-node` (package này cũng re-export toàn bộ core, gồm `nanos`, `millis`, `headers`, `NoRespondersError`); `jetstream`, `jetstreamManager`, `AckPolicy`, `DeliverPolicy`, `RetentionPolicy`, `StorageType` import từ `@nats-io/jetstream`.
-- Tạo stream: `const jsm = await jetstreamManager(nc); await jsm.streams.add({ name: "ORDERS", subjects: ["orders.>"] })`; cập nhật: `jsm.streams.update(name, cfg)`. Config dùng key snake_case như JSON của server (`duplicate_window`, `max_age`... kiểu `Nanos`, đơn vị nanosecond, dùng `nanos(ms)` để đổi).
-- Tạo hoặc cập nhật consumer: `jsm.consumers.add(stream, { durable_name, ack_policy: AckPolicy.Explicit, deliver_policy: DeliverPolicy.All, ack_wait: nanos(30_000), max_deliver: 5, max_ack_pending: 1000 })`; theo docs `add` là idempotent khi gọi lại cùng config; cập nhật dùng `jsm.consumers.update(stream, durable, cfg)`. Không có hàm `createOrUpdate` riêng trong `ConsumerAPI` của 3.4.0 (kiểm tra bằng grep trên `types.d.ts`).
+- Tạo stream: `const jsm = await jetstreamManager(nc); await jsm.streams.add({ name: "ORDERS", subjects: ["orders.>"] })`; cập nhật: `jsm.streams.update(name, cfg)`.
+  Config dùng key snake_case như JSON của server (`duplicate_window`, `max_age`... kiểu `Nanos`, đơn vị nanosecond, dùng `nanos(ms)` để đổi).
+- Tạo hoặc cập nhật consumer: `jsm.consumers.add(stream, { durable_name, ack_policy: AckPolicy.Explicit, deliver_policy: DeliverPolicy.All, ack_wait: nanos(30_000), max_deliver: 5, max_ack_pending: 1000 })`; theo docs `add` là idempotent khi gọi lại cùng config; cập nhật dùng `jsm.consumers.update(stream, durable, cfg)`.
+  Không có hàm `createOrUpdate` riêng trong `ConsumerAPI` của 3.4.0 (kiểm tra bằng grep trên `types.d.ts`).
 - Tiêu thụ: `const js = jetstream(nc); const c = await js.consumers.get("ORDERS", "shipping")`, rồi `await c.consume()` (async iterator hoặc truyền `callback`), `await c.fetch({ max_messages: 10, expires: 2000 })`, hoặc `await c.next()` (trả về `JsMsg | null`).
 - Phản hồi message: `m.ack()`, `m.nak(millis?)` (có delay tùy chọn tính bằng ms), `m.term(reason?)`, `m.working()` (in-progress), `await m.ackAck()` (double ack).
 - Publish: `await js.publish(subject, data, { msgID: "..." })` trả về `PubAck` có `stream`, `seq`, `duplicate`; `expect` nhận các `lastSubjectSequence`, `lastMsgID`... của `StreamExpectations`.
@@ -165,7 +180,8 @@ Nguồn: https://github.com/nats-io/nats.js/tree/main/jetstream và https://docs
 Go (`github.com/nats-io/nats.go` v1.54.0, package `jetstream`, kiểm tra từ source tag v1.54.0):
 - `js, err := jetstream.New(nc)`; stream: `js.CreateStream(ctx, jetstream.StreamConfig{...})`, `js.UpdateStream`, `js.CreateOrUpdateStream`.
 - Consumer: `js.CreateOrUpdateConsumer(ctx, stream, jetstream.ConsumerConfig{Durable, DeliverPolicy: jetstream.DeliverAllPolicy, AckPolicy: jetstream.AckExplicitPolicy, AckWait, MaxDeliver, BackOff, MaxAckPending})` trả về `Consumer`; `CreateConsumer` trả `ErrConsumerExists` nếu đã tồn tại với config khác (trả consumer cũ nếu config giống); `UpdateConsumer` trả `ErrConsumerDoesNotExist` nếu chưa có; `js.Consumer(ctx, stream, name)` để bind vào consumer đã có.
-- Tiêu thụ: `cons.Consume(func(msg jetstream.Msg){...}, opts...)` trả `ConsumeContext` (có `Stop()` và drain); `cons.Messages()` trả iterator; `cons.Fetch(10, jetstream.FetchMaxWait(2*time.Second))` rồi `range batch.Messages()` và kiểm tra `batch.Error()`; `cons.Next()` lấy một message. Option của Consume: `PullMaxMessages`, `PullExpiry`, `ConsumeErrHandler`, `StopAfter`.
+- Tiêu thụ: `cons.Consume(func(msg jetstream.Msg){...}, opts...)` trả `ConsumeContext` (có `Stop()` và drain); `cons.Messages()` trả iterator; `cons.Fetch(10, jetstream.FetchMaxWait(2*time.Second))` rồi `range batch.Messages()` và kiểm tra `batch.Error()`; `cons.Next()` lấy một message.
+  Option của Consume: `PullMaxMessages`, `PullExpiry`, `ConsumeErrHandler`, `StopAfter`.
 - Phản hồi: `msg.Ack()`, `msg.DoubleAck(ctx)`, `msg.Nak()` (giao lại ngay, không theo AckWait hay Backoff), `msg.NakWithDelay(d)`, `msg.InProgress()`, `msg.Term()`, `msg.TermWithReason(reason)` (cần server >= 2.10.4).
 - Publish: `js.Publish(ctx, subject, data, jetstream.WithMsgID("..."))` trả `*PubAck` có `Stream`, `Sequence`, `Duplicate`; có `WithExpectLastSequence...`.
 - Gói `jetstream` này thay cho API cũ `nc.JetStream()`/`js.Subscribe` trong package `nats`; README dùng API mới làm chuẩn.
@@ -181,7 +197,8 @@ Nguồn: https://docs.nats.io/learn/jetstream/surviving-node-loss
 Storage `file` là mặc định và bền; `memory` nhanh nhưng mất khi server restart; R=3 memory sống sót khi một server crash nhưng mất hết khi cả group restart cùng lúc; storage là thuộc tính của cả stream.
 File storage không sync mọi lần ghi xuống đĩa ngay, nên một ghi đã có PubAck vẫn có thể mất khi OS crash; từ server 2.15 với `sync_interval: always` replicated stream chỉ sync WAL (xem mục Phiên bản).
 Nguồn: https://docs.nats.io/learn/jetstream/surviving-node-loss
-Consumer cũng được replicate: mặc định kế thừa số replica của stream; trên stream `limits` có thể đặt ít hơn stream nhưng không nhiều hơn; trên stream `interest` và `workqueue` phải bằng stream. Replica không tăng throughput (ghi vẫn qua một leader, consumer cũng có một leader), muốn scale phải thêm worker dùng chung consumer hoặc tách subject sang nhiều stream.
+Consumer cũng được replicate: mặc định kế thừa số replica của stream; trên stream `limits` có thể đặt ít hơn stream nhưng không nhiều hơn; trên stream `interest` và `workqueue` phải bằng stream.
+Replica không tăng throughput (ghi vẫn qua một leader, consumer cũng có một leader), muốn scale phải thêm worker dùng chung consumer hoặc tách subject sang nhiều stream.
 Nguồn: https://docs.nats.io/learn/jetstream/surviving-node-loss
 Replica tốn tài nguyên: R=3 xấp xỉ gấp ba lưu trữ và lưu lượng ghi so với R=1; mỗi consumer cũng có leader riêng nằm trên một replica của stream.
 Nguồn: https://docs.nats.io/learn/jetstream/surviving-node-loss

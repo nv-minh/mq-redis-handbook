@@ -13,10 +13,16 @@ Nguồn: https://registry.npmjs.org/amqplib/latest
 amqp091-go mới nhất là v1.15.0 (Go module proxy trả về Version v1.15.0, Time 2026-09-15).
 Nguồn: https://pkg.go.dev/github.com/rabbitmq/amqp091-go
 Thay đổi hành vi từ 4.0 liên quan đến lab:
-- Classic queue mirroring đã bị gỡ hoàn toàn từ RabbitMQ 4.0 (deprecated từ 2021), thay bằng quorum queues và/hoặc streams. Nguồn: https://www.rabbitmq.com/docs/3.13/ha
-- Quorum queue có `delivery-limit` mặc định là 20 từ 4.0 (trước đó không giới hạn, retry vô hạn). Nếu không cấu hình dead letter thì message bị drop sau 20 lần. Nguồn: https://www.rabbitmq.com/blog/2024/08/28/quorum-queues-in-4.0 và https://www.rabbitmq.com/docs/quorum-queues
-- Quorum queue không hỗ trợ global QoS prefetch, chỉ hỗ trợ per-consumer prefetch. Nguồn: https://www.rabbitmq.com/docs/quorum-queues
-- Loại queue mặc định khi declare không có `x-queue-type` là classic, trừ khi vhost hoặc node đặt `default_queue_type`. Chi tiết ở phần Khái niệm. Nguồn: https://www.rabbitmq.com/docs/vhosts
+- Classic queue mirroring đã bị gỡ hoàn toàn từ RabbitMQ 4.0 (deprecated từ 2021), thay bằng quorum queues và/hoặc streams.
+  Nguồn: https://www.rabbitmq.com/docs/3.13/ha
+- Quorum queue có `delivery-limit` mặc định là 20 từ 4.0 (trước đó không giới hạn, retry vô hạn).
+  Nếu không cấu hình dead letter thì message bị drop sau 20 lần.
+  Nguồn: https://www.rabbitmq.com/blog/2024/08/28/quorum-queues-in-4.0 và https://www.rabbitmq.com/docs/quorum-queues
+- Quorum queue không hỗ trợ global QoS prefetch, chỉ hỗ trợ per-consumer prefetch.
+  Nguồn: https://www.rabbitmq.com/docs/quorum-queues
+- Loại queue mặc định khi declare không có `x-queue-type` là classic, trừ khi vhost hoặc node đặt `default_queue_type`.
+  Chi tiết ở phần Khái niệm.
+  Nguồn: https://www.rabbitmq.com/docs/vhosts
 - Lab nên luôn truyền `x-queue-type` tường minh (classic hoặc quorum) để không phụ thuộc cấu hình broker.
 
 ## Khái niệm bắt buộc
@@ -64,7 +70,8 @@ Khi `mandatory=false` (mặc định), message unroutable bị discard hoặc đ
 Publish tới exchange không tồn tại gây channel-level exception và channel bị đóng.
 Không publish đồng thời trên một channel dùng chung, dùng channel riêng cho mỗi publisher hoặc thread.
 Nguồn: https://www.rabbitmq.com/docs/publishers
-Kết luận kiểm tra bắt buộc "phát hiện unroutable": publish với `mandatory=true`, đăng ký handler cho `basic.return` (return event), đồng thời bật publisher confirms vì return đến trước ack. Nguồn: https://www.rabbitmq.com/docs/publishers và https://www.rabbitmq.com/docs/confirms
+Kết luận kiểm tra bắt buộc "phát hiện unroutable": publish với `mandatory=true`, đăng ký handler cho `basic.return` (return event), đồng thời bật publisher confirms vì return đến trước ack.
+Nguồn: https://www.rabbitmq.com/docs/publishers và https://www.rabbitmq.com/docs/confirms
 
 ### Mô hình AMQP 0-9-1: connection, channel, exchange, queue, binding
 Connection AMQP 0-9-1 thường sống lâu và chạy trên TCP, channel là "lightweight connection" dùng chung một TCP connection.

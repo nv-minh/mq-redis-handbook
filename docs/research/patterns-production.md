@@ -110,7 +110,8 @@ Nguồn: https://learn.microsoft.com/en-us/azure/architecture/patterns/idempoten
 Nguồn: https://redis.io/docs/latest/commands/set/
 Hai pha cho side effect không nằm trong transaction (gọi API ngoài): ghi key trạng thái in-progress, thực hiện effect, rồi cập nhật thành completed kèm outcome; redeliver gặp in-progress phải reconcile hoặc đưa ra can thiệp thủ công.
 Nguồn: https://learn.microsoft.com/en-us/azure/architecture/patterns/idempotent-consumer
-Hệ quả khi effect thất bại: nếu chiếm key bằng SET NX trước rồi effect lỗi, key đã tồn tại sẽ khiến lần retry bị coi là trùng và bỏ qua effect (mất việc); vì vậy hoặc xoá key khi effect lỗi, hoặc dùng trạng thái in-progress với TTL ngắn rồi đổi thành completed với TTL dài. Đây là suy luận từ hai pha ở trên, handbook nên có lab minh hoạ.
+Hệ quả khi effect thất bại: nếu chiếm key bằng SET NX trước rồi effect lỗi, key đã tồn tại sẽ khiến lần retry bị coi là trùng và bỏ qua effect (mất việc); vì vậy hoặc xoá key khi effect lỗi, hoặc dùng trạng thái in-progress với TTL ngắn rồi đổi thành completed với TTL dài.
+Đây là suy luận từ hai pha ở trên, handbook nên có lab minh hoạ.
 TTL của dedup key phải lớn hơn cửa sổ mà broker còn có thể redeliver (max delivery attempts, visibility/lock timeout, message TTL) và cả message do operator replay từ DLQ; xoá sớm sẽ mở lại cửa sổ trùng lặp.
 Nguồn: https://learn.microsoft.com/en-us/azure/architecture/patterns/idempotent-consumer
 Ví dụ API-level: Stripe lưu status code và body của request đầu tiên theo idempotency key (kể cả lỗi 500), key có thể bị xoá sau tối thiểu 24 giờ, và so sánh tham số để báo lỗi nếu cùng key mà tham số khác.

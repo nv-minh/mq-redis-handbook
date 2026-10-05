@@ -18,12 +18,18 @@ v9.23.0 thêm pipeline pool riêng cho mỗi client (đặt `PipelinePoolSize: -
 Hệ quả cho lab Go: `go.mod` phải khai báo `go 1.26` trở lên.
 
 Thay đổi ở Redis server ảnh hưởng tới lab:
-- `BLMOVE` có từ 6.2.0 và thay thế `BRPOPLPUSH` (đã deprecated). Nguồn: https://redis.io/docs/latest/commands/blmove/
-- `XAUTOCLAIM` có từ 6.2.0, reply 3 phần từ 7.0 (phần thứ ba là danh sách ID đã bị xóa khỏi stream). Nguồn: https://redis.io/docs/latest/commands/xautoclaim/
-- `XNACK` mới từ Redis 8.8.0, và trang lệnh ghi "Not supported" cho Redis Software và Redis Cloud, nên lab chỉ nên nhắc như tính năng tùy chọn, không dựng pattern chính trên nó. Nguồn: https://redis.io/docs/latest/commands/xnack/ và https://redis.io/docs/latest/develop/whats-new/8-8/
-- Redis 8.10 thêm `LMOVEM`/`BLMOVEM` (di chuyển nhiều phần tử giữa các list) và `MAXCOUNT`/`MAXSIZE` cho `XREAD`/`XREADGROUP`. Nguồn: https://redis.io/docs/latest/develop/whats-new/8-10/
-- Redis 8.10: `redis-cli --cluster reshard` và `rebalance` dùng atomic slot migration phía server. Nguồn: https://redis.io/docs/latest/develop/whats-new/8-10/
-- Redis 8.10: sửa lỗi ACL bypass cho `XREAD`/`XREADGROUP` (#15478), nên tránh image cũ hơn cho lab về ACL. Nguồn: https://redis.io/docs/latest/develop/whats-new/8-10/
+- `BLMOVE` có từ 6.2.0 và thay thế `BRPOPLPUSH` (đã deprecated).
+  Nguồn: https://redis.io/docs/latest/commands/blmove/
+- `XAUTOCLAIM` có từ 6.2.0, reply 3 phần từ 7.0 (phần thứ ba là danh sách ID đã bị xóa khỏi stream).
+  Nguồn: https://redis.io/docs/latest/commands/xautoclaim/
+- `XNACK` mới từ Redis 8.8.0, và trang lệnh ghi "Not supported" cho Redis Software và Redis Cloud, nên lab chỉ nên nhắc như tính năng tùy chọn, không dựng pattern chính trên nó.
+  Nguồn: https://redis.io/docs/latest/commands/xnack/ và https://redis.io/docs/latest/develop/whats-new/8-8/
+- Redis 8.10 thêm `LMOVEM`/`BLMOVEM` (di chuyển nhiều phần tử giữa các list) và `MAXCOUNT`/`MAXSIZE` cho `XREAD`/`XREADGROUP`.
+  Nguồn: https://redis.io/docs/latest/develop/whats-new/8-10/
+- Redis 8.10: `redis-cli --cluster reshard` và `rebalance` dùng atomic slot migration phía server.
+  Nguồn: https://redis.io/docs/latest/develop/whats-new/8-10/
+- Redis 8.10: sửa lỗi ACL bypass cho `XREAD`/`XREADGROUP` (#15478), nên tránh image cũ hơn cho lab về ACL.
+  Nguồn: https://redis.io/docs/latest/develop/whats-new/8-10/
 
 ## Khái niệm bắt buộc
 
@@ -33,7 +39,8 @@ Thay đổi ở Redis server ảnh hưởng tới lab:
 
 Redis Open Source hiện có các kiểu dữ liệu: Strings (kèm Bitmaps, Bitfields), Arrays, Geospatial, Hashes, JSON, Lists, các kiểu probabilistic (Bloom, Cuckoo, Count-min, HyperLogLog, t-digest, Top-K), Sets, Sorted sets, Streams, Time series, Vector sets.
 Nguồn: https://redis.io/docs/latest/develop/data-types/
-Kiểu Arrays là mới (Redis 8.8), không cần dạy trong lab. Nguồn: https://redis.io/docs/latest/develop/whats-new/8-8/
+Kiểu Arrays là mới (Redis 8.8), không cần dạy trong lab.
+Nguồn: https://redis.io/docs/latest/develop/whats-new/8-8/
 Lists là danh sách string sắp theo thứ tự insert, Sets là tập string không trùng và không có thứ tự, Sorted sets giữ thứ tự theo score, Streams là append-only log.
 Nguồn: https://redis.io/docs/latest/develop/data-types/
 Key là binary-safe, kích thước tối đa 512 MB, nhưng key rất dài là ý tưởng tệ (ví dụ 1024 byte tốn bộ nhớ và so sánh key tốn kém), nên theo schema `object-type:id`.
@@ -76,7 +83,9 @@ Nguồn: https://redis.io/docs/latest/develop/reference/eviction/ và https://ra
 Nguồn: https://redis.io/docs/latest/develop/reference/eviction/
 Một lệnh thêm nhiều dữ liệu (ví dụ giao tập lớn lưu vào key mới) có thể vượt giới hạn tạm thời.
 Nguồn: https://redis.io/docs/latest/develop/reference/eviction/
-Kết luận về lab `CONFIG SET maxmemory` có thể test an toàn: `CONFIG SET maxmemory <bytes>` và `CONFIG SET maxmemory-policy <policy>` có hiệu lực từ lệnh kế tiếp ("immediately loaded... take effect starting with the next command"). Lab nên (1) chạy trên container riêng, không bật replication, (2) đặt `maxmemory` nhỏ (ví dụ 20-50 MB) cao hơn một chút so với `used_memory` hiện tại, (3) quan sát `INFO stats` `evicted_keys`, `keyspace_hits`, `keyspace_misses` và `INFO memory`, (4) so sánh `noeviction` (ghi bị từ chối) với `allkeys-lru`/`allkeys-lfu` (ghi vẫn được, key cũ bị đẩy ra). Không đoán chính xác số key bị evict vì thuật toán là xấp xỉ; assert theo hướng "evicted_keys > 0" thay vì số cụ thể.
+Kết luận về lab `CONFIG SET maxmemory` có thể test an toàn: `CONFIG SET maxmemory <bytes>` và `CONFIG SET maxmemory-policy <policy>` có hiệu lực từ lệnh kế tiếp ("immediately loaded... take effect starting with the next command").
+Lab nên (1) chạy trên container riêng, không bật replication, (2) đặt `maxmemory` nhỏ (ví dụ 20-50 MB) cao hơn một chút so với `used_memory` hiện tại, (3) quan sát `INFO stats` `evicted_keys`, `keyspace_hits`, `keyspace_misses` và `INFO memory`, (4) so sánh `noeviction` (ghi bị từ chối) với `allkeys-lru`/`allkeys-lfu` (ghi vẫn được, key cũ bị đẩy ra).
+Không đoán chính xác số key bị evict vì thuật toán là xấp xỉ; assert theo hướng "evicted_keys > 0" thay vì số cụ thể.
 Nguồn: https://redis.io/docs/latest/commands/config-set/ và https://redis.io/docs/latest/develop/reference/eviction/
 Nội dung chính xác của thông báo lỗi OOM khi `noeviction`: chưa xác minh trên docs (docs chỉ nói "return an error"); lab nên assert theo prefix `OOM` sau khi tự chạy thử.
 
@@ -131,7 +140,8 @@ Subscriber nhận message theo đúng thứ tự publish.
 Nguồn: https://redis.io/docs/latest/develop/pubsub/
 Pub/Sub không liên quan tới keyspace và database number: publish ở db 10 thì subscriber ở db 1 vẫn nhận được; nên prefix channel theo môi trường.
 Nguồn: https://redis.io/docs/latest/develop/pubsub/
-Một connection ở trạng thái subscribed (RESP2) chỉ được dùng một tập lệnh hạn chế (`PING`, `SUBSCRIBE`, `PSUBSCRIBE`, `SSUBSCRIBE`, các lệnh unsubscribe, `QUIT`, `RESET`); với RESP3 có thể chạy lệnh bất kỳ. Hệ quả cho ioredis 6.0.0 dùng RESP3 mặc định: lab vẫn nên dùng connection riêng cho subscriber (thực hành chuẩn), nhưng không còn bị buộc bởi giới hạn RESP2 (chưa xác minh cách ioredis 6 xử lý thực tế).
+Một connection ở trạng thái subscribed (RESP2) chỉ được dùng một tập lệnh hạn chế (`PING`, `SUBSCRIBE`, `PSUBSCRIBE`, `SSUBSCRIBE`, các lệnh unsubscribe, `QUIT`, `RESET`); với RESP3 có thể chạy lệnh bất kỳ.
+Hệ quả cho ioredis 6.0.0 dùng RESP3 mặc định: lab vẫn nên dùng connection riêng cho subscriber (thực hành chuẩn), nhưng không còn bị buộc bởi giới hạn RESP2 (chưa xác minh cách ioredis 6 xử lý thực tế).
 Nguồn: https://redis.io/docs/latest/develop/pubsub/
 Một message có thể đến nhiều lần nếu client vừa `SUBSCRIBE foo` vừa `PSUBSCRIBE f*` (một `message` và một `pmessage`).
 Nguồn: https://redis.io/docs/latest/develop/pubsub/
@@ -140,7 +150,8 @@ Nguồn: https://redis.io/docs/latest/develop/pubsub/
 
 #### List queue và reliable queue
 
-Kết luận BLMOVE vs BRPOPLPUSH: `BRPOPLPUSH` (since 2.2.0) đã deprecated từ Redis 6.2.0 ("Deprecated as of Redis v6.2.0" trên trang lệnh); `BLMOVE` (since 6.2.0) thay thế, và `BLMOVE source destination RIGHT LEFT timeout` tương đương `BRPOPLPUSH`. Lab dùng `BLMOVE`, `BRPOPLPUSH` chỉ nhắc như lịch sử.
+Kết luận BLMOVE vs BRPOPLPUSH: `BRPOPLPUSH` (since 2.2.0) đã deprecated từ Redis 6.2.0 ("Deprecated as of Redis v6.2.0" trên trang lệnh); `BLMOVE` (since 6.2.0) thay thế, và `BLMOVE source destination RIGHT LEFT timeout` tương đương `BRPOPLPUSH`.
+Lab dùng `BLMOVE`, `BRPOPLPUSH` chỉ nhắc như lịch sử.
 Nguồn: https://redis.io/docs/latest/commands/brpoplpush/ và https://redis.io/docs/latest/commands/blmove/
 `BLMOVE` syntax: `BLMOVE source destination <LEFT|RIGHT> <LEFT|RIGHT> timeout`, timeout là số giây kiểu double, `0` là block vô hạn; hết timeout trả nil/null.
 Nguồn: https://redis.io/docs/latest/commands/blmove/
@@ -159,7 +170,8 @@ ID của entry dạng `<millisecondsTime>-<sequenceNumber>`, `XADD key * ...` đ
 Nguồn: https://redis.io/docs/latest/develop/data-types/streams/
 Consumer group: mỗi message chỉ giao cho một consumer trong group; tạo bằng `XGROUP CREATE key group $|0 [MKSTREAM]`; consumer tự được tạo lần đầu xuất hiện trong `XREADGROUP`.
 Nguồn: https://redis.io/docs/latest/develop/data-types/streams/ và https://redis.io/docs/latest/commands/xreadgroup/
-`XREADGROUP ... STREAMS key >` đọc message chưa từng giao cho consumer nào trong group; ID khác (ví dụ `0`) đọc lại lịch sử pending của chính consumer đó và khi đó `BLOCK`, `NOACK`, `CLAIM` bị bỏ qua. Khi đọc lại pending với ID `0` mà trả rỗng thì consumer biết đã xử lý hết và chuyển sang `>`.
+`XREADGROUP ... STREAMS key >` đọc message chưa từng giao cho consumer nào trong group; ID khác (ví dụ `0`) đọc lại lịch sử pending của chính consumer đó và khi đó `BLOCK`, `NOACK`, `CLAIM` bị bỏ qua.
+Khi đọc lại pending với ID `0` mà trả rỗng thì consumer biết đã xử lý hết và chuyển sang `>`.
 Nguồn: https://redis.io/docs/latest/commands/xreadgroup/
 PEL (Pending Entries List) là danh sách ID đã giao nhưng chưa `XACK`; `XACK` gỡ ID khỏi PEL; `XPENDING` xem PEL kèm idle time và delivery count.
 Nguồn: https://redis.io/docs/latest/commands/xreadgroup/ và https://redis.io/docs/latest/develop/data-types/streams/
@@ -179,13 +191,15 @@ Nguồn: https://redis.io/docs/latest/commands/xreadgroup/
 
 Cú pháp: `XAUTOCLAIM key group consumer min-idle-time start [COUNT count] [JUSTID]`, có từ 6.2.0, độ phức tạp O(1) nếu COUNT nhỏ.
 Nguồn: https://redis.io/docs/latest/commands/xautoclaim/
-`min-idle-time` tính bằng mili giây: chỉ claim các pending entry idle đủ lâu và có ID >= `start`; claim xong thì idle time được reset, nên tại một thời điểm chỉ một consumer claim được một entry. Lưu ý trang lệnh có hai cách diễn đạt hơi lệch nhau ("pending for more than min-idle-time" và "filters out entries having an idle time less than or equal to min-idle-time"); lab nên tránh test đúng biên bằng nhau và dùng khoảng chênh rõ rệt.
+`min-idle-time` tính bằng mili giây: chỉ claim các pending entry idle đủ lâu và có ID >= `start`; claim xong thì idle time được reset, nên tại một thời điểm chỉ một consumer claim được một entry.
+Lưu ý trang lệnh có hai cách diễn đạt hơi lệch nhau ("pending for more than min-idle-time" và "filters out entries having an idle time less than or equal to min-idle-time"); lab nên tránh test đúng biên bằng nhau và dùng khoảng chênh rõ rệt.
 Nguồn: https://redis.io/docs/latest/commands/xautoclaim/
 `COUNT` mặc định 100 là giới hạn số entry cố gắng claim; số entry tối đa được quét trong PEL là `count * 10` (hard-coded), nên có thể claim được ít hơn `count`.
 Nguồn: https://redis.io/docs/latest/commands/xautoclaim/
 Reply là mảng 3 phần tử: (1) stream ID dùng làm `start` cho lần gọi sau (cursor kiểu SCAN), `0-0` nghĩa là đã quét hết PEL; (2) mảng entry đã claim, cùng format `XRANGE`; (3) mảng ID đã không còn trong stream và đã bị xóa khỏi PEL.
 Nguồn: https://redis.io/docs/latest/commands/xautoclaim/
-Xử lý entry đã bị xóa: từ Redis 7.0, nếu thấy entry trong PEL mà đã bị trim hoặc `XDEL` khỏi stream thì không claim, xóa khỏi PEL và trả ID đó ở phần tử thứ ba của reply. Client (go-redis, ioredis) cần đọc phần tử thứ ba, và với client cũ chỉ đọc 2 phần tử thì phải kiểm tra phiên bản (chưa xác minh từng client).
+Xử lý entry đã bị xóa: từ Redis 7.0, nếu thấy entry trong PEL mà đã bị trim hoặc `XDEL` khỏi stream thì không claim, xóa khỏi PEL và trả ID đó ở phần tử thứ ba của reply.
+Client (go-redis, ioredis) cần đọc phần tử thứ ba, và với client cũ chỉ đọc 2 phần tử thì phải kiểm tra phiên bản (chưa xác minh từng client).
 Nguồn: https://redis.io/docs/latest/commands/xautoclaim/
 Claim bằng `XAUTOCLAIM` làm tăng delivery count của entry, trừ khi dùng `JUSTID` (khi đó chỉ trả ID và không tăng counter); delivery count cao là dấu hiệu poison message cần theo dõi để chuyển vào dead-letter.
 Nguồn: https://redis.io/docs/latest/commands/xautoclaim/
@@ -193,7 +207,8 @@ Nên tiếp tục gọi `XAUTOCLAIM` với `0-0` ngay cả khi vừa trả `0-0`
 Nguồn: https://redis.io/docs/latest/commands/xautoclaim/
 `XAUTOCLAIM` tương đương `XPENDING` rồi `XCLAIM`, nhưng đơn giản hơn.
 Nguồn: https://redis.io/docs/latest/commands/xautoclaim/
-Redis 8.8 thêm `XNACK key group SILENT|FAIL|FATAL IDS n id...`: trả message về PEL ở trạng thái không có owner với delivery time 0, nên có thể claim ngay bất kể `min-idle-time`; chế độ `FATAL` đặt delivery counter về LLONG_MAX để đánh dấu poison. `XNACK` chưa được Redis Software và Redis Cloud hỗ trợ (theo trang lệnh), nên chỉ nhắc như mở rộng.
+Redis 8.8 thêm `XNACK key group SILENT|FAIL|FATAL IDS n id...`: trả message về PEL ở trạng thái không có owner với delivery time 0, nên có thể claim ngay bất kể `min-idle-time`; chế độ `FATAL` đặt delivery counter về LLONG_MAX để đánh dấu poison.
+`XNACK` chưa được Redis Software và Redis Cloud hỗ trợ (theo trang lệnh), nên chỉ nhắc như mở rộng.
 Nguồn: https://redis.io/docs/latest/commands/xnack/
 
 #### Trimming và xóa
@@ -262,7 +277,8 @@ Nguồn: https://github.com/redis/ioredis/blob/main/README.md và https://github
 
 Keyspace chia thành 16384 slot; `HASH_SLOT = CRC16(key) mod 16384`; CRC16 là biến thể XMODEM (CRC-16/ACORN): poly 0x1021, init 0, không reflect input/output, xor output 0, kết quả của chuỗi "123456789" là 0x31C3.
 Nguồn: https://redis.io/docs/latest/operate/oss_and_stack/reference/cluster-spec/
-Quy tắc hash tag: nếu key có `{`, và có `}` bên phải nó, và có ít nhất một ký tự giữa `{` đầu tiên và `}` đầu tiên sau nó, thì chỉ phần giữa được hash. Ví dụ từ spec: `{user1000}.following` và `{user1000}.followers` cùng slot; `foo{}{bar}` hash toàn bộ key; `foo{{bar}}zap` hash chuỗi `{bar`; `foo{bar}{zap}` hash `bar`; key bắt đầu bằng `{}` luôn hash toàn bộ.
+Quy tắc hash tag: nếu key có `{`, và có `}` bên phải nó, và có ít nhất một ký tự giữa `{` đầu tiên và `}` đầu tiên sau nó, thì chỉ phần giữa được hash.
+Ví dụ từ spec: `{user1000}.following` và `{user1000}.followers` cùng slot; `foo{}{bar}` hash toàn bộ key; `foo{{bar}}zap` hash chuỗi `{bar`; `foo{bar}{zap}` hash `bar`; key bắt đầu bằng `{}` luôn hash toàn bộ.
 Nguồn: https://redis.io/docs/latest/operate/oss_and_stack/reference/cluster-spec/
 Kết luận về CROSSSLOT: trong Redis Open Source ở chế độ cluster, lệnh multi-key (ví dụ `MSET`, `DEL`, `SUNION`, `LMOVE`, `BLMOVE`, `BLPOP`, `ZUNIONSTORE`, `XREAD`/`XREADGROUP` nhiều stream), lệnh trong `MULTI/EXEC` và script `EVAL`/`EVALSHA` đều phải dùng key cùng một hash slot, nếu không server trả lỗi `CROSSSLOT` ("Keys in request don't hash to the same slot"); dùng hash tag để gom key, ví dụ `{queue}:pending` và `{queue}:processing` cho reliable queue bằng `BLMOVE`.
 Nguồn: https://redis.io/docs/latest/develop/using-commands/multi-key-operations/
@@ -287,15 +303,18 @@ Nguồn: https://raw.githubusercontent.com/redis/redis/8.10/redis.conf
 
 ioredis Cluster: `maxRedirections` mặc định 16; `retryDelayOnFailover` mặc định 100 ms và tài liệu yêu cầu `retryDelayOnFailover * maxRedirections > cluster-node-timeout` để không lệnh nào lỗi khi failover; `retryDelayOnClusterDown`, `retryDelayOnTryAgain` mặc định 100 ms; `retryDelayOnMoved` mặc định 0; `slotsRefreshTimeout` mặc định 1000 ms; `scaleReads` mặc định `master`.
 Nguồn: https://github.com/redis/ioredis/blob/main/README.md
-ioredis `natMap` ánh xạ địa chỉ nội bộ mà node tự khai sang địa chỉ truy cập được từ ngoài, dạng object `{"10.0.1.230:30001": {host, port}}` hoặc function `(key) => {host, port} | null`; tài liệu nói rõ hữu ích khi cluster chạy trong Docker. Đây là cách xử lý lab cluster Docker khi chạy client trên host.
+ioredis `natMap` ánh xạ địa chỉ nội bộ mà node tự khai sang địa chỉ truy cập được từ ngoài, dạng object `{"10.0.1.230:30001": {host, port}}` hoặc function `(key) => {host, port} | null`; tài liệu nói rõ hữu ích khi cluster chạy trong Docker.
+Đây là cách xử lý lab cluster Docker khi chạy client trên host.
 Nguồn: https://github.com/redis/ioredis/blob/main/README.md
 ioredis pipeline trong cluster: mọi key của pipeline phải thuộc slot cùng một node vì ioredis gửi cả pipeline đến một node; không dùng được `multi` không pipeline (`cluster.multi({ pipeline: false })`); `ssubscribe` yêu cầu `shardedSubscribers: true` và mọi channel trong một lệnh `ssubscribe` phải cùng slot.
 Nguồn: https://github.com/redis/ioredis/blob/main/README.md
 ioredis reconnect: `retryStrategy` mặc định backoff mũ tối đa 5 giây cộng jitter tới 199 ms; sau khi reconnect tự subscribe lại (`autoResubscribe`) và gửi lại lệnh blocking chưa hoàn tất (`autoResendUnfulfilledCommands`); mỗi 20 lần retry thì lệnh pending bị flush lỗi (`maxRetriesPerRequest`, đặt `null` để chờ vô hạn); `blockingTimeout` (mặc định tắt) chống kết nối zombie cho lệnh blocking như `blpop`, `xreadgroup`.
 Nguồn: https://github.com/redis/ioredis/blob/main/README.md
-go-redis `ClusterOptions`: `MaxRedirects` mặc định 3; `ReadOnly`, `RouteByLatency`, `RouteRandomly` để đọc từ replica; go-redis không có `natMap`; thay vào đó có `Dialer func(ctx, network, addr)` (có ưu tiên hơn `Addr`) và `ClusterSlots func(ctx)` để tự cung cấp topology. Dùng `Dialer` để remap địa chỉ nội bộ sang địa chỉ host đã publish là suy ra từ chữ ký và comment của option, tài liệu chính thức không có ví dụ NAT: chưa xác minh bằng thực nghiệm.
+go-redis `ClusterOptions`: `MaxRedirects` mặc định 3; `ReadOnly`, `RouteByLatency`, `RouteRandomly` để đọc từ replica; go-redis không có `natMap`; thay vào đó có `Dialer func(ctx, network, addr)` (có ưu tiên hơn `Addr`) và `ClusterSlots func(ctx)` để tự cung cấp topology.
+Dùng `Dialer` để remap địa chỉ nội bộ sang địa chỉ host đã publish là suy ra từ chữ ký và comment của option, tài liệu chính thức không có ví dụ NAT: chưa xác minh bằng thực nghiệm.
 Nguồn: https://github.com/redis/go-redis/blob/v9.23.0/osscluster.go và https://github.com/redis/go-redis/blob/v9.23.0/options.go
-go-redis `Options`: `MaxRetries` mặc định 3, `MinRetryBackoff` 10 ms, `MaxRetryBackoff` 1 giây, `DialTimeout` 5 giây, `ReadTimeout` 5 giây, `PoolSize` mặc định `10 * GOMAXPROCS`, `Protocol` mặc định 3 (RESP3). Hành vi chính xác của go-redis với lệnh blocking có timeout dài hơn `ReadTimeout`: chưa xác minh, lab phải thử.
+go-redis `Options`: `MaxRetries` mặc định 3, `MinRetryBackoff` 10 ms, `MaxRetryBackoff` 1 giây, `DialTimeout` 5 giây, `ReadTimeout` 5 giây, `PoolSize` mặc định `10 * GOMAXPROCS`, `Protocol` mặc định 3 (RESP3).
+Hành vi chính xác của go-redis với lệnh blocking có timeout dài hơn `ReadTimeout`: chưa xác minh, lab phải thử.
 Nguồn: https://github.com/redis/go-redis/blob/v9.23.0/options.go
 
 #### HA tổng hợp, hot key và big key
@@ -319,89 +338,164 @@ Mỗi mục gồm triệu chứng, nguyên nhân và cách khắc phục; nguồ
 
 ### Messaging
 
-Dùng Pub/Sub làm job queue. Triệu chứng: job biến mất khi worker restart hoặc đứt mạng. Nguyên nhân: Pub/Sub là at-most-once, không lưu message. Khắc phục: dùng List với `BLMOVE` hoặc Streams với consumer group.
+Dùng Pub/Sub làm job queue.
+Triệu chứng: job biến mất khi worker restart hoặc đứt mạng.
+Nguyên nhân: Pub/Sub là at-most-once, không lưu message.
+Khắc phục: dùng List với `BLMOVE` hoặc Streams với consumer group.
 Nguồn: https://redis.io/docs/latest/develop/pubsub/
-Queue bằng `LPUSH` + `BRPOP`. Triệu chứng: message mất khi consumer crash giữa lúc pop và xử lý. Khắc phục: `BLMOVE queue processing RIGHT LEFT 0`, xử lý xong thì `LREM processing 1 <msg>`, và cần một reaper đẩy lại item treo quá lâu trong `processing`. `BRPOPLPUSH` đã deprecated từ 6.2.0.
+Queue bằng `LPUSH` + `BRPOP`.
+Triệu chứng: message mất khi consumer crash giữa lúc pop và xử lý.
+Khắc phục: `BLMOVE queue processing RIGHT LEFT 0`, xử lý xong thì `LREM processing 1 <msg>`, và cần một reaper đẩy lại item treo quá lâu trong `processing`.
+`BRPOPLPUSH` đã deprecated từ 6.2.0.
 Nguồn: https://redis.io/docs/latest/commands/lmove/ và https://redis.io/docs/latest/commands/brpoplpush/
-Quên `XACK`. Triệu chứng: PEL phình to, `XPENDING` cho thấy hàng nghìn entry, delivery count tăng. Khắc phục: luôn `XACK` sau khi xử lý thành công, giám sát `XPENDING` và `XINFO GROUPS`, đưa message có delivery count cao vào dead-letter (xóa bằng `XDEL`/`XACKDEL` sau khi sao chép).
+Quên `XACK`.
+Triệu chứng: PEL phình to, `XPENDING` cho thấy hàng nghìn entry, delivery count tăng.
+Khắc phục: luôn `XACK` sau khi xử lý thành công, giám sát `XPENDING` và `XINFO GROUPS`, đưa message có delivery count cao vào dead-letter (xóa bằng `XDEL`/`XACKDEL` sau khi sao chép).
 Nguồn: https://redis.io/docs/latest/commands/xreadgroup/ và https://redis.io/docs/latest/develop/data-types/streams/
-Chỉ đọc bằng `>` mà không đọc lại pending khi khởi động. Triệu chứng: message đã giao cho consumer cũ (đã crash) bị kẹt mãi trong PEL của consumer đó. Khắc phục: khi khởi động đọc với ID `0` cho tới khi rỗng, và chạy một vòng `XAUTOCLAIM` định kỳ để tiếp quản message của consumer chết.
+Chỉ đọc bằng `>` mà không đọc lại pending khi khởi động.
+Triệu chứng: message đã giao cho consumer cũ (đã crash) bị kẹt mãi trong PEL của consumer đó.
+Khắc phục: khi khởi động đọc với ID `0` cho tới khi rỗng, và chạy một vòng `XAUTOCLAIM` định kỳ để tiếp quản message của consumer chết.
 Nguồn: https://redis.io/docs/latest/commands/xreadgroup/ và https://redis.io/docs/latest/commands/xautoclaim/
-Vòng lặp `XAUTOCLAIM` dừng hẳn khi gặp `0-0`. Triệu chứng: message đến hạn claim sau đó không bao giờ được nhặt. Khắc phục: gọi lại từ `0-0` theo chu kỳ, vì thời gian trôi qua làm các entry cũ đủ điều kiện.
+Vòng lặp `XAUTOCLAIM` dừng hẳn khi gặp `0-0`.
+Triệu chứng: message đến hạn claim sau đó không bao giờ được nhặt.
+Khắc phục: gọi lại từ `0-0` theo chu kỳ, vì thời gian trôi qua làm các entry cũ đủ điều kiện.
 Nguồn: https://redis.io/docs/latest/commands/xautoclaim/
-Bỏ qua phần tử thứ ba của reply `XAUTOCLAIM` (hoặc dùng client cũ chỉ đọc 2 phần tử). Triệu chứng: ID đã bị trim/xóa nằm trong PEL vô hạn, hoặc consumer nhận entry với payload `(nil)`. Khắc phục: đọc phần tử thứ ba, ack/ghi log các ID đó; kiểm tra entry null khi đọc lại pending bằng `XREADGROUP ... 0`.
+Bỏ qua phần tử thứ ba của reply `XAUTOCLAIM` (hoặc dùng client cũ chỉ đọc 2 phần tử).
+Triệu chứng: ID đã bị trim/xóa nằm trong PEL vô hạn, hoặc consumer nhận entry với payload `(nil)`.
+Khắc phục: đọc phần tử thứ ba, ack/ghi log các ID đó; kiểm tra entry null khi đọc lại pending bằng `XREADGROUP ... 0`.
 Nguồn: https://redis.io/docs/latest/commands/xautoclaim/ và https://redis.io/docs/latest/commands/xreadgroup/
-`XTRIM`/`MAXLEN` quá tay trong khi consumer chậm. Triệu chứng: mất message chưa xử lý (mặc định `KEEPREF` vẫn xóa entry dù còn trong PEL). Khắc phục: trim theo `MINID` đủ xa, hoặc dùng `ACKED` (Redis 8.2+) để chỉ xóa entry mọi group đã ack; ưu tiên `~` để trim rẻ hơn.
+`XTRIM`/`MAXLEN` quá tay trong khi consumer chậm.
+Triệu chứng: mất message chưa xử lý (mặc định `KEEPREF` vẫn xóa entry dù còn trong PEL).
+Khắc phục: trim theo `MINID` đủ xa, hoặc dùng `ACKED` (Redis 8.2+) để chỉ xóa entry mọi group đã ack; ưu tiên `~` để trim rẻ hơn.
 Nguồn: https://redis.io/docs/latest/commands/xtrim/
-Dùng `NOACK` vì tiện. Triệu chứng: crash là mất message mà không dấu vết. Khắc phục: chỉ dùng khi chấp nhận mất message.
+Dùng `NOACK` vì tiện.
+Triệu chứng: crash là mất message mà không dấu vết.
+Khắc phục: chỉ dùng khi chấp nhận mất message.
 Nguồn: https://redis.io/docs/latest/commands/xreadgroup/
-Test claim đúng biên `min-idle-time`. Triệu chứng: test flaky. Nguyên nhân: tài liệu `XAUTOCLAIM` diễn đạt không nhất quán về biên (more than / less than or equal). Khắc phục: dùng khoảng chênh lớn so với `min-idle-time` trong test.
+Test claim đúng biên `min-idle-time`.
+Triệu chứng: test flaky.
+Nguyên nhân: tài liệu `XAUTOCLAIM` diễn đạt không nhất quán về biên (more than / less than or equal).
+Khắc phục: dùng khoảng chênh lớn so với `min-idle-time` trong test.
 Nguồn: https://redis.io/docs/latest/commands/xautoclaim/
-`XAUTOCLAIM` với `COUNT` lớn rồi tưởng đã claim hết. Triệu chứng: số entry claim được ít hơn `COUNT`. Nguyên nhân: server chỉ quét tối đa `COUNT * 10` entry PEL mỗi lần. Khắc phục: lặp theo cursor trả về.
+`XAUTOCLAIM` với `COUNT` lớn rồi tưởng đã claim hết.
+Triệu chứng: số entry claim được ít hơn `COUNT`.
+Nguyên nhân: server chỉ quét tối đa `COUNT * 10` entry PEL mỗi lần.
+Khắc phục: lặp theo cursor trả về.
 Nguồn: https://redis.io/docs/latest/commands/xautoclaim/
 
 ### Core
 
-Dùng Redis vừa làm cache vừa làm queue trên cùng instance với `allkeys-lru`. Triệu chứng: job hoặc stream bị evict. Khắc phục: tách instance (tài liệu cũng khuyên tách khi dùng `volatile-*` cho dữ liệu bền), hoặc dùng `noeviction` cho instance chứa queue và chấp nhận lỗi ghi khi đầy.
+Dùng Redis vừa làm cache vừa làm queue trên cùng instance với `allkeys-lru`.
+Triệu chứng: job hoặc stream bị evict.
+Khắc phục: tách instance (tài liệu cũng khuyên tách khi dùng `volatile-*` cho dữ liệu bền), hoặc dùng `noeviction` cho instance chứa queue và chấp nhận lỗi ghi khi đầy.
 Nguồn: https://redis.io/docs/latest/develop/reference/eviction/
-`noeviction` khi đầy bộ nhớ. Triệu chứng: lệnh ghi (kể cả `XADD`, `LPUSH`) trả lỗi OOM trong khi lệnh đọc vẫn chạy; transaction có lệnh cần bộ nhớ bị từ chối ở `EXEC`. Khắc phục: giám sát `used_memory` trên `maxmemory`, đặt cảnh báo, chọn policy phù hợp.
+`noeviction` khi đầy bộ nhớ.
+Triệu chứng: lệnh ghi (kể cả `XADD`, `LPUSH`) trả lỗi OOM trong khi lệnh đọc vẫn chạy; transaction có lệnh cần bộ nhớ bị từ chối ở `EXEC`.
+Khắc phục: giám sát `used_memory` trên `maxmemory`, đặt cảnh báo, chọn policy phù hợp.
 Nguồn: https://redis.io/docs/latest/develop/reference/eviction/ và https://redis.io/docs/latest/develop/using-commands/transactions/
-Dùng policy `volatile-*` nhưng key không có TTL. Triệu chứng: không có key nào bị evict, ghi bị lỗi như `noeviction`. Khắc phục: đặt TTL hoặc đổi sang `allkeys-*`.
+Dùng policy `volatile-*` nhưng key không có TTL.
+Triệu chứng: không có key nào bị evict, ghi bị lỗi như `noeviction`.
+Khắc phục: đặt TTL hoặc đổi sang `allkeys-*`.
 Nguồn: https://redis.io/docs/latest/develop/reference/eviction/
-Đặt `maxmemory` sát tổng RAM khi có replication hoặc AOF. Triệu chứng: process bị OOM killer vì buffer replica/AOF không được tính vào `maxmemory`. Khắc phục: chừa RAM trống cho buffer (tham khảo `mem_not_counted_for_evict` trong `INFO memory`).
+Đặt `maxmemory` sát tổng RAM khi có replication hoặc AOF.
+Triệu chứng: process bị OOM killer vì buffer replica/AOF không được tính vào `maxmemory`.
+Khắc phục: chừa RAM trống cho buffer (tham khảo `mem_not_counted_for_evict` trong `INFO memory`).
 Nguồn: https://redis.io/docs/latest/develop/reference/eviction/
-Replica không evict mà dùng nhiều bộ nhớ hơn master. Khắc phục: giám sát replica, đảm bảo đủ RAM; chỉ đổi `replica-ignore-maxmemory` khi hiểu rõ hậu quả.
+Replica không evict mà dùng nhiều bộ nhớ hơn master.
+Khắc phục: giám sát replica, đảm bảo đủ RAM; chỉ đổi `replica-ignore-maxmemory` khi hiểu rõ hậu quả.
 Nguồn: https://redis.io/docs/latest/operate/oss_and_stack/management/replication/
-Hy vọng `MULTI/EXEC` rollback. Triệu chứng: một lệnh lỗi runtime (WRONGTYPE) nhưng các lệnh khác vẫn ghi. Khắc phục: validate trước, hoặc dùng Lua; không có rollback.
+Hy vọng `MULTI/EXEC` rollback.
+Triệu chứng: một lệnh lỗi runtime (WRONGTYPE) nhưng các lệnh khác vẫn ghi.
+Khắc phục: validate trước, hoặc dùng Lua; không có rollback.
 Nguồn: https://redis.io/docs/latest/develop/using-commands/transactions/
-Dùng `WATCH` với key có TTL trên Redis cũ hơn 6.0.9. Triệu chứng: key hết hạn không làm transaction abort. Khắc phục: dùng Redis >= 6.0.9; với compare-and-set trên string, Redis 8.4+ có `SET ... IFEQ`.
+Dùng `WATCH` với key có TTL trên Redis cũ hơn 6.0.9.
+Triệu chứng: key hết hạn không làm transaction abort.
+Khắc phục: dùng Redis >= 6.0.9; với compare-and-set trên string, Redis 8.4+ có `SET ... IFEQ`.
 Nguồn: https://redis.io/docs/latest/develop/using-commands/transactions/
-Lua script chạy lâu hoặc vòng lặp lớn. Triệu chứng: toàn server bị chặn, client nhận lỗi BUSY. Khắc phục: giữ script ngắn, ngưỡng `busy-reply-threshold` mặc định 5000 ms, dùng `SCRIPT KILL` (chỉ khi script chưa ghi) hoặc shutdown.
+Lua script chạy lâu hoặc vòng lặp lớn.
+Triệu chứng: toàn server bị chặn, client nhận lỗi BUSY.
+Khắc phục: giữ script ngắn, ngưỡng `busy-reply-threshold` mặc định 5000 ms, dùng `SCRIPT KILL` (chỉ khi script chưa ghi) hoặc shutdown.
 Nguồn: https://redis.io/docs/latest/develop/programmability/eval-intro/ và https://raw.githubusercontent.com/redis/redis/8.10/redis.conf
-`NOSCRIPT` sau restart hoặc failover. Khắc phục: dùng `EVALSHA` và fallback `SCRIPT LOAD`; trong pipeline dùng `EVAL` hoặc `SCRIPT LOAD` trước vì lỗi `NOSCRIPT` trong pipeline không xử lý được.
+`NOSCRIPT` sau restart hoặc failover.
+Khắc phục: dùng `EVALSHA` và fallback `SCRIPT LOAD`; trong pipeline dùng `EVAL` hoặc `SCRIPT LOAD` trước vì lỗi `NOSCRIPT` trong pipeline không xử lý được.
 Nguồn: https://redis.io/docs/latest/develop/programmability/eval-intro/
-Script truy cập key không khai báo trong `KEYS` (key sinh động). Triệu chứng: chạy được ở standalone, hỏng ở Cluster. Khắc phục: khai báo mọi key qua `KEYS`, cùng hash slot.
+Script truy cập key không khai báo trong `KEYS` (key sinh động).
+Triệu chứng: chạy được ở standalone, hỏng ở Cluster.
+Khắc phục: khai báo mọi key qua `KEYS`, cùng hash slot.
 Nguồn: https://redis.io/docs/latest/develop/programmability/eval-intro/
-Pipeline hàng triệu lệnh một lần. Triệu chứng: server tốn bộ nhớ xếp hàng reply. Khắc phục: chia batch khoảng 10k lệnh.
+Pipeline hàng triệu lệnh một lần.
+Triệu chứng: server tốn bộ nhớ xếp hàng reply.
+Khắc phục: chia batch khoảng 10k lệnh.
 Nguồn: https://redis.io/docs/latest/develop/using-commands/pipelining/
-`KEYS *` và `SMEMBERS`/`HGETALL` trên collection lớn trong production. Triệu chứng: latency tăng vọt, các client khác timeout. Khắc phục: `SCAN`/`SSCAN`/`HSCAN`, tìm big key bằng `redis-cli --bigkeys`/`--memkeys`, xóa bằng `UNLINK`.
+`KEYS *` và `SMEMBERS`/`HGETALL` trên collection lớn trong production.
+Triệu chứng: latency tăng vọt, các client khác timeout.
+Khắc phục: `SCAN`/`SSCAN`/`HSCAN`, tìm big key bằng `redis-cli --bigkeys`/`--memkeys`, xóa bằng `UNLINK`.
 Nguồn: https://redis.io/docs/latest/develop/using-commands/keyspace/ và https://redis.io/docs/latest/develop/tools/cli/ và https://redis.io/docs/latest/commands/unlink/
-Chỉ dùng RDB hoặc AOF `everysec` rồi kỳ vọng không mất dữ liệu. Triệu chứng: sau crash mất vài phút (RDB) hoặc khoảng 1 giây (AOF `everysec`) dữ liệu. Khắc phục: chọn `appendfsync always` nếu cần, hoặc chấp nhận và ghi rõ trong thiết kế; tài liệu khuyên dùng cả RDB và AOF.
+Chỉ dùng RDB hoặc AOF `everysec` rồi kỳ vọng không mất dữ liệu.
+Triệu chứng: sau crash mất vài phút (RDB) hoặc khoảng 1 giây (AOF `everysec`) dữ liệu.
+Khắc phục: chọn `appendfsync always` nếu cần, hoặc chấp nhận và ghi rõ trong thiết kế; tài liệu khuyên dùng cả RDB và AOF.
 Nguồn: https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/
-`fork()` lâu với dataset lớn. Triệu chứng: Redis ngừng phục vụ vài mili giây tới khoảng một giây khi `BGSAVE` hoặc rewrite. Khắc phục: giảm tần suất snapshot, dùng AOF, đo bằng latency tools.
+`fork()` lâu với dataset lớn.
+Triệu chứng: Redis ngừng phục vụ vài mili giây tới khoảng một giây khi `BGSAVE` hoặc rewrite.
+Khắc phục: giảm tần suất snapshot, dùng AOF, đo bằng latency tools.
 Nguồn: https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/
-Bật AOF trên instance đang chạy chỉ bằng sửa file config rồi restart. Triệu chứng: mất dữ liệu. Khắc phục: bật bằng `CONFIG SET appendonly yes`, đợi rewrite xong, rồi `CONFIG REWRITE`.
+Bật AOF trên instance đang chạy chỉ bằng sửa file config rồi restart.
+Triệu chứng: mất dữ liệu.
+Khắc phục: bật bằng `CONFIG SET appendonly yes`, đợi rewrite xong, rồi `CONFIG REWRITE`.
 Nguồn: https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/
 
 ### HA, Cluster và client
 
-Master tắt persistence và tự restart. Triệu chứng: sau restart master rỗng, replica sync và cũng bị xóa sạch. Khắc phục: bật persistence trên master và replica, hoặc tắt auto restart.
+Master tắt persistence và tự restart.
+Triệu chứng: sau restart master rỗng, replica sync và cũng bị xóa sạch.
+Khắc phục: bật persistence trên master và replica, hoặc tắt auto restart.
 Nguồn: https://redis.io/docs/latest/operate/oss_and_stack/management/replication/
-Chỉ 2 Sentinel hoặc đặt cùng một máy. Triệu chứng: không failover được hoặc failover sai ở phía thiểu số. Khắc phục: tối thiểu 3 Sentinel trên 3 máy độc lập, hiểu `quorum` chỉ để phát hiện còn bầu leader cần đa số.
+Chỉ 2 Sentinel hoặc đặt cùng một máy.
+Triệu chứng: không failover được hoặc failover sai ở phía thiểu số.
+Khắc phục: tối thiểu 3 Sentinel trên 3 máy độc lập, hiểu `quorum` chỉ để phát hiện còn bầu leader cần đa số.
 Nguồn: https://redis.io/docs/latest/operate/oss_and_stack/management/sentinel/
-Failover quá chậm trong lab. Nguyên nhân: `down-after-milliseconds` mặc định 30000 ms. Khắc phục: đặt 5000 ms cho lab, và đo thời gian failover thực tế.
+Failover quá chậm trong lab.
+Nguyên nhân: `down-after-milliseconds` mặc định 30000 ms.
+Khắc phục: đặt 5000 ms cho lab, và đo thời gian failover thực tế.
 Nguồn: https://raw.githubusercontent.com/redis/redis/8.10/sentinel.conf và https://redis.io/docs/latest/operate/oss_and_stack/management/sentinel/
-Mất write sau failover dù đã nhận OK. Nguyên nhân: replication bất đồng bộ. Khắc phục: `WAIT` giảm xác suất nhưng không loại bỏ; `min-replicas-to-write`/`min-replicas-max-lag` giới hạn cửa sổ mất dữ liệu ở master phía thiểu số.
+Mất write sau failover dù đã nhận OK.
+Nguyên nhân: replication bất đồng bộ.
+Khắc phục: `WAIT` giảm xác suất nhưng không loại bỏ; `min-replicas-to-write`/`min-replicas-max-lag` giới hạn cửa sổ mất dữ liệu ở master phía thiểu số.
 Nguồn: https://redis.io/docs/latest/operate/oss_and_stack/management/replication/ và https://redis.io/docs/latest/operate/oss_and_stack/management/sentinel/
-Sentinel trong Docker bridge network. Triệu chứng: Sentinel không thấy nhau, replica bị liệt kê sai địa chỉ nên không bao giờ failover. Khắc phục: map port 1:1, `--net=host`, hoặc `sentinel announce-ip`/`announce-port` và `replica-announce-ip`/`replica-announce-port`.
+Sentinel trong Docker bridge network.
+Triệu chứng: Sentinel không thấy nhau, replica bị liệt kê sai địa chỉ nên không bao giờ failover.
+Khắc phục: map port 1:1, `--net=host`, hoặc `sentinel announce-ip`/`announce-port` và `replica-announce-ip`/`replica-announce-port`.
 Nguồn: https://redis.io/docs/latest/operate/oss_and_stack/management/sentinel/ và https://redis.io/docs/latest/operate/oss_and_stack/management/replication/
-Cluster trong Docker, client chạy ngoài network Docker. Triệu chứng: kết nối seed node được nhưng sau `CLUSTER SLOTS` client cố nối tới IP nội bộ, gây timeout hoặc `ECONNREFUSED`, hay vòng lặp `MOVED`. Khắc phục: ioredis dùng `natMap`; go-redis dùng `Dialer` để remap (chưa xác minh bằng thực nghiệm); phía server dùng `cluster-announce-ip`/`cluster-announce-port`/`cluster-announce-bus-port`.
+Cluster trong Docker, client chạy ngoài network Docker.
+Triệu chứng: kết nối seed node được nhưng sau `CLUSTER SLOTS` client cố nối tới IP nội bộ, gây timeout hoặc `ECONNREFUSED`, hay vòng lặp `MOVED`.
+Khắc phục: ioredis dùng `natMap`; go-redis dùng `Dialer` để remap (chưa xác minh bằng thực nghiệm); phía server dùng `cluster-announce-ip`/`cluster-announce-port`/`cluster-announce-bus-port`.
 Nguồn: https://github.com/redis/ioredis/blob/main/README.md và https://github.com/redis/go-redis/blob/v9.23.0/osscluster.go và https://raw.githubusercontent.com/redis/redis/8.10/redis.conf
-`CROSSSLOT` khi dùng `MSET`, `SUNION`, `BLMOVE`, `MULTI/EXEC`, script, `XREADGROUP` nhiều stream. Khắc phục: hash tag trong tên key (ví dụ `{orders}:pending` và `{orders}:processing`), kiểm tra bằng `CLUSTER KEYSLOT`.
+`CROSSSLOT` khi dùng `MSET`, `SUNION`, `BLMOVE`, `MULTI/EXEC`, script, `XREADGROUP` nhiều stream.
+Khắc phục: hash tag trong tên key (ví dụ `{orders}:pending` và `{orders}:processing`), kiểm tra bằng `CLUSTER KEYSLOT`.
 Nguồn: https://redis.io/docs/latest/develop/using-commands/multi-key-operations/ và https://redis.io/docs/latest/operate/oss_and_stack/reference/cluster-spec/
-Hash tag cho mọi key (ví dụ `{app}:...`). Triệu chứng: một master quá tải, các node khác rảnh. Khắc phục: chỉ gom những key thực sự cần multi-key operation.
+Hash tag cho mọi key (ví dụ `{app}:...`).
+Triệu chứng: một master quá tải, các node khác rảnh.
+Khắc phục: chỉ gom những key thực sự cần multi-key operation.
 Nguồn: https://redis.io/docs/latest/develop/using-commands/keyspace/
-ioredis Cluster: lệnh lỗi trong lúc failover vì tổng thời gian retry nhỏ hơn `cluster-node-timeout`. Khắc phục: đảm bảo `retryDelayOnFailover * maxRedirections > cluster-node-timeout` (mặc định 100 ms * 16 = 1600 ms, nhỏ hơn 15000 ms của redis.conf mặc định nên cần tăng nếu muốn lệnh sống sót qua failover).
+ioredis Cluster: lệnh lỗi trong lúc failover vì tổng thời gian retry nhỏ hơn `cluster-node-timeout`.
+Khắc phục: đảm bảo `retryDelayOnFailover * maxRedirections > cluster-node-timeout` (mặc định 100 ms * 16 = 1600 ms, nhỏ hơn 15000 ms của redis.conf mặc định nên cần tăng nếu muốn lệnh sống sót qua failover).
 Nguồn: https://github.com/redis/ioredis/blob/main/README.md và https://raw.githubusercontent.com/redis/redis/8.10/redis.conf
-ioredis: lệnh pending bị flush lỗi sau 20 lần retry (`maxRetriesPerRequest`) trong khi đang failover, hoặc ngược lại đặt `null` làm lệnh chờ vô hạn. Khắc phục: chọn có chủ đích theo SLA.
+ioredis: lệnh pending bị flush lỗi sau 20 lần retry (`maxRetriesPerRequest`) trong khi đang failover, hoặc ngược lại đặt `null` làm lệnh chờ vô hạn.
+Khắc phục: chọn có chủ đích theo SLA.
 Nguồn: https://github.com/redis/ioredis/blob/main/README.md
-Lệnh blocking (`BLMOVE`, `XREADGROUP BLOCK`) treo vì kết nối zombie sau khi mất mạng im lặng (ví dụ Docker network disconnect). Khắc phục: ioredis bật `blockingTimeout`; với go-redis đặt `ReadTimeout` và `ContextTimeoutEnabled` phù hợp (hành vi chính xác: chưa xác minh).
+Lệnh blocking (`BLMOVE`, `XREADGROUP BLOCK`) treo vì kết nối zombie sau khi mất mạng im lặng (ví dụ Docker network disconnect).
+Khắc phục: ioredis bật `blockingTimeout`; với go-redis đặt `ReadTimeout` và `ContextTimeoutEnabled` phù hợp (hành vi chính xác: chưa xác minh).
 Nguồn: https://github.com/redis/ioredis/blob/main/README.md và https://github.com/redis/go-redis/blob/v9.23.0/options.go
-Pub/Sub và lệnh blocking dùng chung một connection với lệnh thường. Triệu chứng: lệnh thường bị kẹt sau lệnh blocking hoặc connection ở trạng thái subscribed bị từ chối lệnh (RESP2). Khắc phục: dùng connection riêng cho subscriber và cho blocking consumer.
+Pub/Sub và lệnh blocking dùng chung một connection với lệnh thường.
+Triệu chứng: lệnh thường bị kẹt sau lệnh blocking hoặc connection ở trạng thái subscribed bị từ chối lệnh (RESP2).
+Khắc phục: dùng connection riêng cho subscriber và cho blocking consumer.
 Nguồn: https://redis.io/docs/latest/develop/pubsub/ và https://redis.io/docs/latest/commands/blmove/ (BLMOVE chặn connection tới khi có phần tử hoặc hết timeout)
-Sau failover, subscriber im lặng. Khắc phục: ioredis tự `autoResubscribe` sau reconnect; Pub/Sub vẫn là at-most-once nên message trong khoảng gián đoạn mất.
+Sau failover, subscriber im lặng.
+Khắc phục: ioredis tự `autoResubscribe` sau reconnect; Pub/Sub vẫn là at-most-once nên message trong khoảng gián đoạn mất.
 Nguồn: https://github.com/redis/ioredis/blob/main/README.md và https://redis.io/docs/latest/develop/pubsub/
-Nâng cấp ioredis 6.0.0 mà không để ý RESP3 mặc định và Node >= 20; go-redis v9.23.0 yêu cầu Go >= 1.26 và có Protocol mặc định 3. Triệu chứng: lỗi build hoặc khác biệt hình dạng reply. Khắc phục: pin phiên bản, đặt `protocol: 2` (ioredis) hoặc `Protocol: 2` (go-redis) nếu cần hành vi cũ, và chạy lại lab.
+Nâng cấp ioredis 6.0.0 mà không để ý RESP3 mặc định và Node >= 20; go-redis v9.23.0 yêu cầu Go >= 1.26 và có Protocol mặc định 3.
+Triệu chứng: lỗi build hoặc khác biệt hình dạng reply.
+Khắc phục: pin phiên bản, đặt `protocol: 2` (ioredis) hoặc `Protocol: 2` (go-redis) nếu cần hành vi cũ, và chạy lại lab.
 Nguồn: https://github.com/redis/ioredis/blob/main/CHANGELOG.md và https://github.com/redis/go-redis/releases/tag/v9.23.0 và https://github.com/redis/go-redis/blob/v9.23.0/options.go
 
 ## Nguồn

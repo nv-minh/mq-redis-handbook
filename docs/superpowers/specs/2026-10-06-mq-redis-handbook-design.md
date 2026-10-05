@@ -2,6 +2,7 @@
 
 Ngày: 2026-10-06
 Trạng thái: chờ review
+Cập nhật 2026-10-06: áp dụng ba điều chỉnh của plan (xem cuối mục 4 và mục 5).
 
 ## 1. Mục tiêu và bối cảnh
 
@@ -56,15 +57,19 @@ Bốn use case của mục 09:
 mq-redis-handbook/
   README.md                  # lộ trình học
   Makefile
-  infra/docker-compose.yml   # Redis, RabbitMQ, Kafka (KRaft), NATS
+  infra/docker-compose.yml   # Redis, RabbitMQ, Kafka (KRaft), NATS, Postgres
+  package.json               # một package.json ở gốc cho toàn bộ TS
   go.mod                     # một module Go ở gốc
   pnpm-workspace.yaml
+  packages/testkit-ts/       # helper test dùng chung cho TS
+  internal/testkit/          # helper test dùng chung cho Go
+  scripts/                   # check-docs.sh, check-compose.sh
   NN-ten-chu-de/
     theory.md
     lab-NN-ten/
       README.md
-      ts/                    # package.json, src/, test/ (vitest)
-      go/                    # main.go, *_test.go
+      ts/                    # lab.ts, demo.ts, lab.test.ts (vitest), thư mục thường
+      go/                    # lab.go, lab_test.go, demo/main.go
   .github/workflows/ci.yml
   docs/superpowers/specs/    # spec này
 ```
@@ -81,11 +86,17 @@ Lab ở mục 08 và 09 có thêm sơ đồ failure scenario.
 
 Hình vẽ dùng Mermaid nhúng trong Markdown, vì GitHub render sẵn và diff được như code.
 
+Điều chỉnh (2026-10-06):
+- Hạ tầng thêm Postgres vào `infra/docker-compose.yml`, vì outbox và saga cần DB.
+- Dùng một `package.json` ở gốc thay cho `package.json` từng lab, vì 30 lab lặp lại cùng một bộ dependency. Các lab là thư mục thường, không phải workspace package.
+
 ## 5. Tooling
 
 TypeScript:
 - Node 22, pnpm workspace.
-- Thư viện: `ioredis`, `amqplib`, `kafkajs`, `nats`, `bullmq`.
+- Thư viện: `ioredis`, `amqplib`, `@confluentinc/kafka-javascript`, `@nats-io/transport-node` và `@nats-io/jetstream`, `bullmq`.
+- Điều chỉnh (2026-10-06): `kafkajs` được thay bằng `@confluentinc/kafka-javascript` vì `kafkajs` không được cập nhật từ 2023-02. `nats` được thay bằng `@nats-io/transport-node` và `@nats-io/jetstream` vì package cũ đã được đánh dấu moved.
+- `typescript` 7 chạy song song với API TypeScript 6 (alias `@typescript/typescript6`), vì `typescript-eslint` chưa hỗ trợ TS 7.
 - Test: vitest. Lint: eslint. Format: prettier.
 
 Go:

@@ -13,6 +13,7 @@ Nguồn: https://github.com/nats-io/nats.js
 Client Go: `github.com/nats-io/nats.go` v1.54.0 phát hành 2026-09-18, yêu cầu Go tối thiểu 1.26, và CI chạy với nats-server v2.15.0.
 Nguồn: https://github.com/nats-io/nats.go/releases/tag/v1.54.0
 Thay đổi gần đây liên quan lab:
+
 - Từ server 2.15: mỗi stream mặc định giới hạn 1000 consumer nếu không đặt `max_consumers` trong stream config hoặc account limits (đặt `-1` để tắt giới hạn, hoặc dùng `default_max_consumers`).
   Giới hạn này chỉ chặn tạo consumer mới, không xóa consumer cũ.
   Nguồn: https://github.com/nats-io/nats-server/releases/tag/v2.15.0
@@ -167,6 +168,7 @@ Nguồn: https://docs.nats.io/learn/jetstream/your-first-stream
 ### API client mới (đã kiểm tra với package đã cài và source tag v1.54.0)
 
 TypeScript (`@nats-io/transport-node` 3.4.0 + `@nats-io/jetstream` 3.4.0, kiểm tra bằng `npm i` và đọc file `.d.ts`):
+
 - `connect` import từ `@nats-io/transport-node` (package này cũng re-export toàn bộ core, gồm `nanos`, `millis`, `headers`, `NoRespondersError`); `jetstream`, `jetstreamManager`, `AckPolicy`, `DeliverPolicy`, `RetentionPolicy`, `StorageType` import từ `@nats-io/jetstream`.
 - Tạo stream: `const jsm = await jetstreamManager(nc); await jsm.streams.add({ name: "ORDERS", subjects: ["orders.>"] })`; cập nhật: `jsm.streams.update(name, cfg)`.
   Config dùng key snake_case như JSON của server (`duplicate_window`, `max_age`... kiểu `Nanos`, đơn vị nanosecond, dùng `nanos(ms)` để đổi).
@@ -175,9 +177,10 @@ TypeScript (`@nats-io/transport-node` 3.4.0 + `@nats-io/jetstream` 3.4.0, kiểm
 - Tiêu thụ: `const js = jetstream(nc); const c = await js.consumers.get("ORDERS", "shipping")`, rồi `await c.consume()` (async iterator hoặc truyền `callback`), `await c.fetch({ max_messages: 10, expires: 2000 })`, hoặc `await c.next()` (trả về `JsMsg | null`).
 - Phản hồi message: `m.ack()`, `m.nak(millis?)` (có delay tùy chọn tính bằng ms), `m.term(reason?)`, `m.working()` (in-progress), `await m.ackAck()` (double ack).
 - Publish: `await js.publish(subject, data, { msgID: "..." })` trả về `PubAck` có `stream`, `seq`, `duplicate`; `expect` nhận các `lastSubjectSequence`, `lastMsgID`... của `StreamExpectations`.
-Nguồn: https://github.com/nats-io/nats.js/tree/main/jetstream và https://docs.nats.io/learn/jetstream/delivery-and-acknowledgment và https://docs.nats.io/learn/jetstream/acknowledgment
+  Nguồn: https://github.com/nats-io/nats.js/tree/main/jetstream và https://docs.nats.io/learn/jetstream/delivery-and-acknowledgment và https://docs.nats.io/learn/jetstream/acknowledgment
 
 Go (`github.com/nats-io/nats.go` v1.54.0, package `jetstream`, kiểm tra từ source tag v1.54.0):
+
 - `js, err := jetstream.New(nc)`; stream: `js.CreateStream(ctx, jetstream.StreamConfig{...})`, `js.UpdateStream`, `js.CreateOrUpdateStream`.
 - Consumer: `js.CreateOrUpdateConsumer(ctx, stream, jetstream.ConsumerConfig{Durable, DeliverPolicy: jetstream.DeliverAllPolicy, AckPolicy: jetstream.AckExplicitPolicy, AckWait, MaxDeliver, BackOff, MaxAckPending})` trả về `Consumer`; `CreateConsumer` trả `ErrConsumerExists` nếu đã tồn tại với config khác (trả consumer cũ nếu config giống); `UpdateConsumer` trả `ErrConsumerDoesNotExist` nếu chưa có; `js.Consumer(ctx, stream, name)` để bind vào consumer đã có.
 - Tiêu thụ: `cons.Consume(func(msg jetstream.Msg){...}, opts...)` trả `ConsumeContext` (có `Stop()` và drain); `cons.Messages()` trả iterator; `cons.Fetch(10, jetstream.FetchMaxWait(2*time.Second))` rồi `range batch.Messages()` và kiểm tra `batch.Error()`; `cons.Next()` lấy một message.
@@ -185,7 +188,7 @@ Go (`github.com/nats-io/nats.go` v1.54.0, package `jetstream`, kiểm tra từ s
 - Phản hồi: `msg.Ack()`, `msg.DoubleAck(ctx)`, `msg.Nak()` (giao lại ngay, không theo AckWait hay Backoff), `msg.NakWithDelay(d)`, `msg.InProgress()`, `msg.Term()`, `msg.TermWithReason(reason)` (cần server >= 2.10.4).
 - Publish: `js.Publish(ctx, subject, data, jetstream.WithMsgID("..."))` trả `*PubAck` có `Stream`, `Sequence`, `Duplicate`; có `WithExpectLastSequence...`.
 - Gói `jetstream` này thay cho API cũ `nc.JetStream()`/`js.Subscribe` trong package `nats`; README dùng API mới làm chuẩn.
-Nguồn: https://github.com/nats-io/nats.go/tree/v1.54.0/jetstream và https://pkg.go.dev/github.com/nats-io/nats.go/jetstream
+  Nguồn: https://github.com/nats-io/nats.go/tree/v1.54.0/jetstream và https://pkg.go.dev/github.com/nats-io/nats.go/jetstream
 
 ### JetStream: replication và clustering cơ bản
 
@@ -221,126 +224,142 @@ Quorum commit bảo vệ khỏi mất server, không bảo vệ khỏi mất đ�
 Nguồn: https://docs.nats.io/learn/clustering/replication-and-r3
 Lab dùng một server đơn (`nats:2.15.0-alpine` với `-js -m 8222 -sd /data`), nên stream chỉ có thể R=1; không thể minh họa R=3 trong lab nếu không dựng cluster 3 node (nhận xét về repo, không phải sự kiện từ docs).
 
-
-
 ## Lỗi thường gặp ở production
 
 Các lỗi dưới đây đều có nguồn; mỗi mục gồm triệu chứng, nguyên nhân, cách sửa.
 
 ### 1. Message "biến mất" vì dùng core NATS thay cho JetStream
+
 Triệu chứng: subscriber restart xong không thấy message publish lúc nó vắng mặt; publisher không báo lỗi.
 Nguyên nhân: core NATS là at-most-once, publish không có subscriber thì message bị bỏ; `nats pub` thường vẫn in `Published N bytes` dù không có stream nào bắt subject.
 Cách sửa: dùng stream, publish bằng JetStream và đọc `PubAck` (hoặc `nats pub --jetstream`).
 Nguồn: https://docs.nats.io/learn/core-nats/publish-subscribe và https://docs.nats.io/learn/jetstream/publishing
 
 ### 2. Retry publish tạo bản trùng
+
 Triệu chứng: cùng một order xuất hiện hai lần trong stream sau khi publish timeout rồi retry.
 Nguyên nhân: timeout không có nghĩa là chưa lưu (chỉ mất ack); không có `Nats-Msg-Id` thì retry lưu bản thứ hai; retry sau hơn duplicate window (mặc định 2 phút) cũng tạo bản trùng dù có Msg-Id.
 Cách sửa: gắn `Nats-Msg-Id` ổn định (order id) cho mọi publish có thể retry và giữ khoảng retry trong duplicate window; consumer vẫn cần idempotent vì dedup chỉ phía publish.
 Nguồn: https://docs.nats.io/learn/jetstream/publishing
 
 ### 3. Quên ack hoặc ack sau AckWait gây redelivery vô hạn hoặc xử lý hai lần
+
 Triệu chứng: cùng message quay lại mãi, `tries` tăng; hoặc hai worker cùng xử lý một order.
 Nguyên nhân: MaxDeliver mặc định `-1`; AckWait mặc định 30 giây ngắn hơn thời gian xử lý thật mà worker không gửi in-progress.
 Cách sửa: luôn ack trên đường thành công; tăng AckWait hoặc gọi `m.working()` / `msg.InProgress()` cho job dài; làm side effect idempotent theo `order_id`.
 Nguồn: https://docs.nats.io/learn/jetstream/acknowledgment và https://docs.nats.io/learn/jetstream/worker-pool
 
 ### 4. Poison message ăn hết MaxDeliver và bị bỏ im lặng
+
 Triệu chứng: một message hỏng bị nak liên tục rồi biến mất khỏi consumer, không có dấu vết trong output bình thường.
 Nguyên nhân: không có đường term; hết MaxDeliver server xóa message khỏi pending và không có dead-letter queue.
 Cách sửa: gọi term khi chắc chắn không bao giờ thành công; đặt MaxDeliver hữu hạn kèm backoff; subscribe `$JS.EVENT.ADVISORY.CONSUMER.MAX_DELIVERIES.{stream}.{consumer}` và `$JS.EVENT.ADVISORY.CONSUMER.MSG_TERMINATED.{stream}.{consumer}` để lưu lại message lỗi (tự publish sang stream DLQ do app quản lý).
 Nguồn: https://docs.nats.io/learn/jetstream/acknowledgment
 
 ### 5. Nak trần giao lại ngay, backoff không làm chậm nak
+
 Triệu chứng: lỗi tạm thời (downstream chết) làm message lặp liên tục trong vài mili giây, tốn hết MaxDeliver.
 Nguyên nhân: nak không theo AckWait hay Backoff; backoff chỉ áp dụng cho redelivery do hết AckWait.
 Cách sửa: dùng nak kèm delay (`m.nak(10_000)` ở TS, `NakWithDelay(10*time.Second)` ở Go).
 Nguồn: https://docs.nats.io/learn/jetstream/acknowledgment và https://github.com/nats-io/nats.go/blob/v1.54.0/jetstream/message.go
 
 ### 6. Redelivery làm đảo thứ tự, ack all làm mất message
+
 Triệu chứng: message 3 đến sau 4 và 5; với `AckPolicy=all` message lỗi bị mất.
 Nguyên nhân: bản giao lại đi theo thứ tự giao; ack message 10 trong policy `all` cũng xóa message 7 đang chờ giao lại.
 Cách sửa: đặt `MaxAckPending = 1` khi cần đúng thứ tự (đổi lại mất song song); dùng `explicit` cho công việc không được mất.
 Nguồn: https://docs.nats.io/learn/jetstream/delivery-and-acknowledgment và https://docs.nats.io/learn/jetstream/acknowledgment
 
 ### 7. MaxAckPending quá thấp làm worker nhàn rỗi
+
 Triệu chứng: có 10 worker nhưng chỉ 3 message được xử lý cùng lúc, hoặc batch 100 chỉ nhận về 10.
 Nguyên nhân: MaxAckPending (mặc định 1000) dùng chung cho cả consumer, không phải mỗi worker.
 Cách sửa: đặt lớn hơn hoặc bằng số worker và batch size.
 Nguồn: https://docs.nats.io/learn/jetstream/worker-pool và https://docs.nats.io/learn/jetstream/pull-consumers
 
 ### 8. Fetch rỗng bị coi là lỗi
+
 Triệu chứng: worker báo lỗi hoặc crash khi stream im lặng.
 Nguyên nhân: fetch trả về rỗng sau `expires` (server trả 408, hoặc 404 No Messages với no-wait) là bình thường; fetch với `expires` bằng 0 ở mức protocol có thể treo (thư viện mặc định khoảng 30 giây).
 Cách sửa: coi rỗng là "chưa có việc", lặp lại fetch; đặt `expires` rõ ràng.
 Nguồn: https://docs.nats.io/learn/jetstream/pull-consumers
 
 ### 9. Stream retention interest hoặc workqueue làm đầy đĩa hoặc bị từ chối
+
 Triệu chứng: stream `interest` phình to; tạo consumer thứ hai trên stream `workqueue` bị lỗi.
 Nguyên nhân: consumer chậm giữ message của stream `interest`; workqueue cấm consumer chồng lấn (`multiple non-filtered consumers not allowed on workqueue stream`).
 Cách sửa: luôn đặt limits làm backstop và theo dõi consumer; một consumer cho workqueue và nhiều worker dùng chung nó, hoặc filter chia subject không trùng.
 Nguồn: https://docs.nats.io/learn/jetstream/retention-policies
 
 ### 10. Cấu hình cố định lúc tạo bị đổi sau này
+
 Triệu chứng: `deliver policy can not be updated`, `stream configuration update can not change storage type`, `...can not change retention policy to/from workqueue`.
 Nguyên nhân: storage, persist mode, deliver/ack/replay policy và retention sang/từ workqueue không sửa được sau khi tạo; tên stream không đổi được.
 Cách sửa: quyết định trước; nếu sai thì tạo object mới và chuyển dữ liệu (mirror hoặc source); tạo lại consumer sẽ mất vị trí đã lưu.
 Nguồn: https://docs.nats.io/learn/jetstream/policies và https://docs.nats.io/learn/jetstream/your-first-stream
 
 ### 11. Kỳ vọng sai về deliver policy `new` và ephemeral consumer
+
 Triệu chứng: client restart đọc cả backlog dù consumer tạo với `new`; hoặc consumer ephemeral biến mất rồi đọc lại từ đầu.
 Nguyên nhân: deliver policy chỉ áp dụng một lần lúc tạo, durable giữ vị trí đã lưu; ephemeral bị xóa khi idle.
 Cách sửa: dùng durable cho việc cần resume; muốn bỏ backlog thì tạo consumer mới hoặc dùng deliver policy phù hợp lúc tạo.
 Nguồn: https://docs.nats.io/learn/jetstream/policies và https://docs.nats.io/learn/jetstream/reading-back
 
 ### 12. Mất message đã có PubAck do durability của storage
+
 Triệu chứng: sau crash OS, message đã báo PubAck biến mất; hoặc stream memory trống sau restart.
 Nguyên nhân: file storage chỉ sync theo `sync_interval` (mặc định 2 phút); `memory` mất khi restart; R=1 mất khi mất node.
 Cách sửa: R=3 và file storage cho dữ liệu quan trọng, `sync_interval: always` nếu cần cam kết mạnh nhất (chậm hơn), không dùng persist mode `async` cho order log.
 Nguồn: https://docs.nats.io/learn/clustering/replication-and-r3 và https://docs.nats.io/learn/jetstream/surviving-node-loss và https://docs.nats.io/learn/jetstream/policies
 
 ### 13. Async publish không kiểm tra ack
+
 Triệu chứng: mất ghi im lặng, hoặc retry làm đảo thứ tự trong stream.
 Nguyên nhân: không đọc PubAck của async publish; retry muộn nằm sau các message đến sau.
 Cách sửa: thu và kiểm tra mọi PubAck; thêm `Nats-Expected-Last-Subject-Sequence` khi thứ tự quan trọng; `Nats-Msg-Id` để chặn trùng.
 Nguồn: https://docs.nats.io/learn/jetstream/advanced-publishing
 
 ### 14. Queue group: gõ sai tên, kỳ vọng giao đúng một lần hoặc chia đều
+
 Triệu chứng: mỗi order bị xử lý hai lần; một worker nhận liên tiếp nhiều message; worker chết thì order mất.
 Nguyên nhân: `packers` và `packer` là hai group khác nhau; chọn ngẫu nhiên chứ không round-robin; core NATS at-most-once, không giao lại.
 Cách sửa: dùng đúng một hằng số tên group; với việc không được mất dùng JetStream work queue; xử lý idempotent.
 Nguồn: https://docs.nats.io/learn/core-nats/queue-groups
 
 ### 15. Slow consumer và flush khi thoát (core NATS)
+
 Triệu chứng: log `Slow Consumer Detected`, subscriber bị ngắt hoặc mất message; publisher ngắn hạn thoát mà message không tới server.
 Nguyên nhân: pending buffer đầy (mặc định client Go 500000 message và 64 MB; JS không giới hạn phía client); publish chỉ ghi buffer của client.
 Cách sửa: đặt pending limits theo workload, đăng ký async error callback, chuyển việc nặng sang worker; gọi flush hoặc drain trước khi thoát.
 Nguồn: https://docs.nats.io/learn/resilient-clients/slow-consumers và https://docs.nats.io/learn/core-nats/publish-subscribe
 
 ### 16. Giới hạn mới của server 2.15 và client Go 1.54
+
 Triệu chứng: tạo consumer thứ 1001 trên một stream bị từ chối sau khi nâng cấp lên server 2.15; `go build` lỗi trên Go cũ hơn 1.26 với nats.go v1.54.0.
 Nguyên nhân: server 2.15 giới hạn mặc định 1000 consumer mỗi stream; nats.go v1.54.0 nâng yêu cầu Go tối thiểu lên 1.26.
 Cách sửa: đặt `max_consumers` trong stream config hoặc `default_max_consumers` (`-1` để tắt); dùng Go >= 1.26 (kiểm tra `go.mod` của lab).
 Nguồn: https://github.com/nats-io/nats-server/releases/tag/v2.15.0 và https://github.com/nats-io/nats.go/releases/tag/v1.54.0
 
 ### 17. Gói npm `nats` cũ
+
 Triệu chứng: `npm install nats` cài bản 2.29.x và API khác (`nats.connect`, `js.pullSubscribe`).
 Nguyên nhân: gói `nats` đã bị deprecate với thông báo `Package moved. Use @nats-io/transport-node` (kiểm tra `npm view nats deprecated` ngày 2026-10-06).
 Cách sửa: dùng `@nats-io/transport-node` và `@nats-io/jetstream` 3.4.0.
 Nguồn: https://github.com/nats-io/nats.js và https://registry.npmjs.org/nats
 
 ### 18. Lỗi client đã sửa gần đây (cần dùng đúng phiên bản)
+
 Triệu chứng: iterator `Messages()` im lặng sau reconnect (Go); push consumer kẹt ở heartbeat (JS).
 Nguyên nhân: bug đã sửa trong nats.go v1.54.0 (Messages() sau reconnect) và nats.js v3.4.0 (push consumer heartbeat).
 Cách sửa: giữ đúng phiên bản của lab (Go v1.54.0, JS 3.4.0), không hạ cấp.
 Nguồn: https://github.com/nats-io/nats.go/releases/tag/v1.54.0 và https://github.com/nats-io/nats.js/releases/tag/v3.4.0
 
 ### 19. Docs chính thức có chỗ không khớp
+
 Triệu chứng: subscribe advisory nak theo `MSG_NAK` không nhận gì.
 Nguyên nhân: trang reference ghi `MSG_NAK`, source server v2.15.0 dùng `MSG_NAKED`.
 Cách sửa: dùng `$JS.EVENT.ADVISORY.CONSUMER.MSG_NAKED.{stream}.{consumer}` hoặc wildcard `$JS.EVENT.ADVISORY.CONSUMER.>`.
 Nguồn: https://github.com/nats-io/nats-server/blob/v2.15.0/server/jetstream_api.go và https://docs.nats.io/reference/jetstream/advisory/nak
-
 
 ## Nguồn
 

@@ -18,6 +18,7 @@ Ghi chú cho lab: bản 1.11.0 chưa phát hành (mục "unreleased" trong CHANG
 Client Go `github.com/segmentio/kafka-go` v0.4.51 là tag mới nhất trên Go module proxy, ngày 2026-04-23.
 Nguồn: https://proxy.golang.org/github.com/segmentio/kafka-go/@latest
 Các thay đổi 4.x liên quan lab:
+
 - Kafka 4.0 chỉ hỗ trợ KRaft, ZooKeeper mode đã bị gỡ, và điều này vẫn đúng ở 4.3 ("Apache Kafka 4.3 only supports KRaft mode - ZooKeeper mode has been removed").
 - Kafka 4.0 loại bỏ các protocol API version cũ, yêu cầu broker và Java client từ 2.1 trở lên, và khuyến nghị đọc KIP-896 cho client không thuộc Apache Kafka.
 - KIP-848 (consumer rebalance protocol thế hệ mới) là GA từ Kafka 4.0, tự bật trên server khi finalize nâng cấp lên 4.0.
@@ -27,8 +28,8 @@ Các thay đổi 4.x liên quan lab:
 - 4.2 coi Queues for Kafka (share groups, KIP-932) là production-ready, nằm ngoài phạm vi chương này.
 - 4.3 đánh dấu cấu hình `group.coordinator.rebalance.protocols` là deprecated, sẽ bỏ ở Kafka 5.0 (mọi protocol luôn bật, điều khiển bởi `group.version` qua `kafka-features.sh`).
 - Trong `--bootstrap-server` của các tool CLI, chỉ chấp nhận danh sách phân tách bằng dấu phẩy.
-Nguồn: https://kafka.apache.org/43/getting-started/upgrade/
-Nguồn: https://kafka.apache.org/42/getting-started/upgrade/
+  Nguồn: https://kafka.apache.org/43/getting-started/upgrade/
+  Nguồn: https://kafka.apache.org/42/getting-started/upgrade/
 
 ## Khái niệm bắt buộc
 
@@ -43,14 +44,15 @@ Nguồn: https://github.com/apache/kafka/blob/4.3/config/server.properties
 Khi tự cấu hình bằng env var (ví dụ docker compose) thì phải khai báo đủ các thuộc tính KRaft bắt buộc, và quy tắc đặt tên env var là: thay `.` bằng `_`, thay `_` bằng `__`, thay `-` bằng `___`, thêm tiền tố `KAFKA_`.
 Nguồn: https://github.com/apache/kafka/blob/4.3/docker/examples/README.md
 Compose mẫu chính thức cho single node (plaintext) dùng các biến sau, đây là mẫu nên chép cho lab:
+
 - `KAFKA_NODE_ID=1`, `KAFKA_PROCESS_ROLES=broker,controller`, `KAFKA_CONTROLLER_QUORUM_VOTERS=1@broker:29093`, `KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER`, `CLUSTER_ID` (một UUID base64).
 - `KAFKA_LISTENERS=CONTROLLER://:29093,PLAINTEXT_HOST://:9092,PLAINTEXT://:19092` và `KAFKA_ADVERTISED_LISTENERS=PLAINTEXT_HOST://localhost:9092,PLAINTEXT://broker:19092`, tức client trên host dùng `localhost:9092`, client trong mạng compose dùng `broker:19092`.
 - `KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT` và `KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT`.
 - Internal topic phải hạ về 1 replica vì mặc định cần 3 broker: `KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1`, `KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1`, `KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1`.
 - Tùy chọn: `KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0` (bỏ độ trễ 3 giây khi group mới lập, giúp test nhanh) và `KAFKA_SHARE_COORDINATOR_STATE_TOPIC_REPLICATION_FACTOR=1` cùng `..._MIN_ISR=1` (chỉ cần nếu dùng share group).
-Nguồn: https://github.com/apache/kafka/blob/4.3/docker/examples/docker-compose-files/single-node/plaintext/docker-compose.yml
-Docker Compose mẫu này lưu ý `advertised.listeners` quyết định địa chỉ mà broker trả về trong metadata, nên nếu advertised sai thì client kết nối bootstrap được nhưng producer và consumer treo hoặc lỗi kết nối ở bước sau (xem mục lỗi production).
-Nếu một broker có `min.insync.replicas` lớn hơn số replica có sẵn thì produce với `acks=all` sẽ bị từ chối, nên topic tạo ở single-node phải dùng replication factor 1 và `min.insync.replicas=1` (chưa xác minh bằng chạy thật trong lab, suy ra từ định nghĩa `min.insync.replicas` ở mục replication).
+  Nguồn: https://github.com/apache/kafka/blob/4.3/docker/examples/docker-compose-files/single-node/plaintext/docker-compose.yml
+  Docker Compose mẫu này lưu ý `advertised.listeners` quyết định địa chỉ mà broker trả về trong metadata, nên nếu advertised sai thì client kết nối bootstrap được nhưng producer và consumer treo hoặc lỗi kết nối ở bước sau (xem mục lỗi production).
+  Nếu một broker có `min.insync.replicas` lớn hơn số replica có sẵn thì produce với `acks=all` sẽ bị từ chối, nên topic tạo ở single-node phải dùng replication factor 1 và `min.insync.replicas=1` (chưa xác minh bằng chạy thật trong lab, suy ra từ định nghĩa `min.insync.replicas` ở mục replication).
 
 ### Log, topic, partition, thứ tự (ordering)
 

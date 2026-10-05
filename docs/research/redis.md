@@ -18,6 +18,7 @@ v9.23.0 thêm pipeline pool riêng cho mỗi client (đặt `PipelinePoolSize: -
 Hệ quả cho lab Go: `go.mod` phải khai báo `go 1.26` trở lên.
 
 Thay đổi ở Redis server ảnh hưởng tới lab:
+
 - `BLMOVE` có từ 6.2.0 và thay thế `BRPOPLPUSH` (đã deprecated).
   Nguồn: https://redis.io/docs/latest/commands/blmove/
 - `XAUTOCLAIM` có từ 6.2.0, reply 3 phần từ 7.0 (phần thứ ba là danh sách ID đã bị xóa khỏi stream).

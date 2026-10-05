@@ -4,19 +4,20 @@
 
 Kiểm tra ngày 2026-10-06 qua npm registry, Go module proxy và GitHub releases.
 
-| Thành phần | Phiên bản | Ngày phát hành | Ghi chú |
-|---|---|---|---|
-| bullmq (npm) | 6.3.11 | 2026-10-01 | Khớp phiên bản yêu cầu; engines node >= 14.17.0 |
-| asynq (Go) | v0.26.0 | 2026-02-03 | Khớp; go.mod yêu cầu go 1.24.0, phụ thuộc go-redis v9.14.1 |
-| ws (npm) | 8.22.0 | chưa ghi | engines node >= 10 |
-| github.com/coder/websocket | v1.8.15 | 2026-06-15 | go 1.23 |
-| ioredis (npm) | 6.0.0 | 2026-07-31 | engines node >= 20 |
-| redis (node-redis, npm) | 6.3.0 | 2026-09-30 | BullMQ 6 cũng chấp nhận (peer `redis >= 5.0.0`) |
-| github.com/redis/go-redis/v9 | v9.23.0 | 2026-10-05 | |
-| golang.org/x/sync | v0.23.0 | 2026-08-31 | chứa `singleflight` |
-| Redis server | 8.10.2 (nhánh 8.x mới nhất trên GitHub releases) | 2026-09-17 | `DELEX ... IFEQ` và `SET ... IFEQ` từ 8.4.0; `XNACK` từ 8.8.0 |
+| Thành phần                   | Phiên bản                                        | Ngày phát hành | Ghi chú                                                       |
+| ---------------------------- | ------------------------------------------------ | -------------- | ------------------------------------------------------------- |
+| bullmq (npm)                 | 6.3.11                                           | 2026-10-01     | Khớp phiên bản yêu cầu; engines node >= 14.17.0               |
+| asynq (Go)                   | v0.26.0                                          | 2026-02-03     | Khớp; go.mod yêu cầu go 1.24.0, phụ thuộc go-redis v9.14.1    |
+| ws (npm)                     | 8.22.0                                           | chưa ghi       | engines node >= 10                                            |
+| github.com/coder/websocket   | v1.8.15                                          | 2026-06-15     | go 1.23                                                       |
+| ioredis (npm)                | 6.0.0                                            | 2026-07-31     | engines node >= 20                                            |
+| redis (node-redis, npm)      | 6.3.0                                            | 2026-09-30     | BullMQ 6 cũng chấp nhận (peer `redis >= 5.0.0`)               |
+| github.com/redis/go-redis/v9 | v9.23.0                                          | 2026-10-05     |                                                               |
+| golang.org/x/sync            | v0.23.0                                          | 2026-08-31     | chứa `singleflight`                                           |
+| Redis server                 | 8.10.2 (nhánh 8.x mới nhất trên GitHub releases) | 2026-09-17     | `DELEX ... IFEQ` và `SET ... IFEQ` từ 8.4.0; `XNACK` từ 8.8.0 |
 
 Thay đổi đáng chú ý:
+
 - BullMQ 6.0.0 (2026-07-30): bỏ legacy repeatable jobs (dùng Job Schedulers), bỏ `debounce` (dùng deduplication), bỏ `Job#discard()` (dùng `UnrecoverableError`), bỏ trạng thái `paused` khỏi JobType, `ioredis` thành optional peer dependency nên phải tự `npm i ioredis`, thêm backend PostgreSQL.
 - Lab TS với BullMQ 6 phải cài `ioredis` rõ ràng và không dùng API repeatable cũ; các bài hướng dẫn BullMQ cũ trên mạng (QueueScheduler, `repeat` option, `debounce`) là outdated.
 - asynq v0.26.0: thêm Headers cho task, `UpdateTaskPayload` cho inspector; asynq ít phát hành (bản trước là 0.25.1 vào 2024-12) nên cần cân nhắc khi chọn cho dự án mới.
@@ -24,7 +25,7 @@ Thay đổi đáng chú ý:
 - Redis `XNACK` chỉ có từ 8.8.0, `XAUTOCLAIM` từ 6.2.0; Redis Pub/Sub sharded từ 7.0.
 - coder/websocket: do Coder duy trì từ 2024, trước đó là `nhooyr.io/websocket`; import path hiện tại là `github.com/coder/websocket`.
 - Trang `SET` của Redis ghi mẫu `SET NX EX` làm lock là "discouraged in favor of Redlock" - chú ý mâu thuẫn quan điểm với Kleppmann, xem mục distributed lock.
-Nguồn: https://registry.npmjs.org/bullmq, https://proxy.golang.org/github.com/hibiken/asynq/@latest, https://proxy.golang.org/github.com/coder/websocket/@latest, https://github.com/taskforcesh/bullmq/releases/tag/v6.0.0, https://github.com/hibiken/asynq/blob/v0.26.0/CHANGELOG.md
+  Nguồn: https://registry.npmjs.org/bullmq, https://proxy.golang.org/github.com/hibiken/asynq/@latest, https://proxy.golang.org/github.com/coder/websocket/@latest, https://github.com/taskforcesh/bullmq/releases/tag/v6.0.0, https://github.com/hibiken/asynq/blob/v0.26.0/CHANGELOG.md
 
 ## Khái niệm bắt buộc
 

@@ -14,6 +14,14 @@
       "@handbook/testkit": ["./packages/testkit-ts/src/index.ts"]
     }
   },
-  "include": ["packages", "[0-9][0-9]-*", "vitest.config.ts"],
-  "exclude": ["node_modules"]
+  "include": ["vitest.config.ts", "*/**/*.ts"],
+  "exclude": [
+    "node_modules",
+    "**/node_modules",
+    ".worktrees",
+    ".superpowers",
+    "docs",
+    "infra",
+    "scripts"
+  ]
 }

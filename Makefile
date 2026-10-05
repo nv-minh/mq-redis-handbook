@@ -20,7 +20,7 @@ help:
 	@echo "make lab-ts LAB=<NN-ten/lab-NN-ten>  run a TypeScript lab demo"
 	@echo "make lab-go LAB=<NN-ten/lab-NN-ten>  run a Go lab demo"
 	@echo "make test | test-ts | test-go        run tests (needs 'make up' first for labs)"
-	@echo "make lint                            eslint, prettier, tsc, golangci-lint, compose check"
+	@echo "make lint                            eslint, prettier, tsc, golangci-lint, no-sleep gate, compose check"
 	@echo "make docs-check                      validate theory.md and lab READMEs"
 
 up:
@@ -42,6 +42,8 @@ test: test-scripts test-ts test-go
 test-scripts:
 	bash scripts/check-docs.test.sh
 	bash scripts/check-compose.test.sh
+	bash scripts/check-no-sleep.test.sh
+	bash scripts/check-tsconfig.test.sh
 
 test-ts:
 	pnpm exec vitest run
@@ -50,6 +52,7 @@ test-go:
 	go test ./...
 
 lint: lint-ts lint-go
+	bash scripts/check-no-sleep.sh
 	bash scripts/check-compose.sh
 
 lint-ts:

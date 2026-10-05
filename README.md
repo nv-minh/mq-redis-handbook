@@ -24,7 +24,8 @@ Chủ đề nào chưa có thư mục thì được đánh dấu "chưa viết".
 ## Yêu cầu
 
 - Node 22 và pnpm.
-- Go 1.23 trở lên (`go.mod` dùng directive `go 1.23`).
+- Go 1.26 trở lên (`go.mod` dùng directive `go 1.26.0`, vì `go-redis` v9.23.0 yêu cầu Go >= 1.26).
+  Nếu Go cài sẵn cũ hơn, `GOTOOLCHAIN=auto` (mặc định) tự tải toolchain 1.26 lần chạy đầu.
 - Docker với Compose v2 (image đều multi-arch: Apple Silicon arm64 và amd64).
 
 `make lint` chạy `golangci-lint` v2.14.0 qua `go run`, và bản này tự tải toolchain Go mới hơn nếu cần (`GOTOOLCHAIN=auto`).

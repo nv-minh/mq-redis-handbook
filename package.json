@@ -1,0 +1,30 @@
+{
+  "name": "mq-redis-handbook",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MQ & Redis Handbook: tai lieu va lab thuc hanh (TypeScript va Go)",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write .",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@mermaid-js/mermaid-cli": "12.0.0",
+    "@types/node": "^22.20.5",
+    "@typescript/native": "npm:typescript@7.0.2",
+    "eslint": "10.12.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.13.0",
+    "prettier": "3.9.9",
+    "tsx": "4.23.15",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "typescript-eslint": "^8.71.0",
+    "vitest": "5.0.3"
+  }
+}

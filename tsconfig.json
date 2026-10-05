@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["node"],
+    "paths": {
+      "@handbook/testkit": ["./packages/testkit-ts/src/index.ts"]
+    }
+  },
+  "include": ["packages", "[0-9][0-9]-*", "vitest.config.ts"],
+  "exclude": ["node_modules"]
+}

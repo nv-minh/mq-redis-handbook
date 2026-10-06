@@ -90,11 +90,13 @@ Các bước:
   Sau `down-after-milliseconds` không có phản hồi hợp lệ, Sentinel đó đánh dấu master là SDOWN (subjectively down).
 - Sentinel hỏi các Sentinel khác, và khi đủ quorum người đồng ý thì master thành ODOWN.
 - Các Sentinel bầu một leader theo đa số, theo epoch cấu hình mới.
-- Leader chọn replica tốt nhất (ưu tiên theo priority, offset replication, runid), gửi `REPLICAOF NO ONE` để promote.
+- Leader chọn replica tốt nhất, gửi `REPLICAOF NO ONE` để promote.
+  Thứ tự chọn theo docs: loại replica bị ngắt kết nối quá lâu, rồi `replica-priority` thấp hơn được ưu tiên (0 nghĩa là không bao giờ được promote), rồi replica đã xử lý nhiều dữ liệu hơn (replication offset lớn hơn), cuối cùng runid nhỏ hơn theo thứ tự từ điển để kết quả xác định.
 - Leader cấu hình các replica còn lại theo master mới (`parallel-syncs` giới hạn số replica sync cùng lúc).
 - Master cũ được ghi nhớ là replica: khi nó sống lại, Sentinel gửi lệnh biến nó thành replica của master mới.
 - Sentinel đổi cấu hình một instance thì gửi `CLIENT KILL type normal` để ngắt client cũ và ép chúng hỏi lại địa chỉ master.
 
+Các mục SDOWN, ODOWN, bầu leader và thứ tự chọn replica đã được đối chiếu với các mục "SDOWN and ODOWN failure state" và "Replica selection and priority" của trang Sentinel.
 Nguồn: https://redis.io/docs/latest/operate/oss_and_stack/management/sentinel/ và https://redis.io/docs/latest/develop/reference/sentinel-clients/
 
 ```mermaid
@@ -216,7 +218,8 @@ Nguồn: https://redis.io/docs/latest/operate/oss_and_stack/reference/cluster-sp
 
 ### Những điều cần biết thêm
 
-- Cluster không có nhiều database: chỉ có database 0, lệnh `SELECT` khác 0 bị từ chối.
+- Cluster không có nhiều database: spec ghi "We only support database `0`; the `SELECT` command is not allowed".
+  Lab đã kiểm chứng trên cluster Docker: `SELECT 1` trả `ERR SELECT is not allowed in cluster mode`, còn `SELECT 0` trả `OK`.
 - Cluster dùng replication bất đồng bộ nên vẫn có cửa sổ mất write ("last failover wins").
   Một master bị failover khi đa số master coi nó là không liên lạc được trong ít nhất `cluster-node-timeout`.
   Cluster bus dùng port dữ liệu cộng 10000.
@@ -319,7 +322,7 @@ Nguồn: https://redis.io/docs/latest/operate/oss_and_stack/management/sentinel/
 ## Nguồn tham khảo
 
 Phiên bản đã dùng: Redis 8.10.2 (image `redis:8.10.2`), ioredis 6.0.0, go-redis v9.23.0.
-Mọi nguồn được đọc ngày 2026-10-06.
+Mọi nguồn được đọc ngày 2026-10-06, và các câu ngoài file research (chỉ có database 0 trong Cluster, thứ tự chọn replica, luồng SDOWN và ODOWN) đã được đối chiếu với trang Sentinel và cluster-spec.
 Các phần research ghi "chưa xác minh" được nêu rõ trong bài hoặc được lab kiểm chứng: giao thức atomic slot migration của 8.10, hướng dẫn Cluster-trong-Docker chính thức, và cách dùng `Dialer` của go-redis.
 
 - Redis docs: Replication

@@ -79,7 +79,7 @@ Client phải ánh xạ về `127.0.0.1` với cùng port:
 - go-redis không có `natMap`.
   `FailoverOptions.Dialer` được đặt vào cả client dial master (`masterReplicaDialer` gọi `opt.Dialer(ctx, network, addr)` với addr là địa chỉ Sentinel trả về) lẫn client nói chuyện với Sentinel, nên một hàm `Dialer` đổi địa chỉ trước khi `net.Dial` là đủ.
   Test `TestClientWritesThroughTheMasterThatSentinelReports` và hai test chaos chạy qua đúng đường này, nên nếu `Dialer` không thay được `natMap` trên go-redis v9.23.0 thì các test này fail.
-  Kết quả chạy thật được ghi ở mục "Kết quả đo" bên dưới.
+  Các test này pass trên go-redis v9.23.0, nên cách dùng `Dialer` thay `natMap` đã được kiểm chứng bằng thực nghiệm (log của go-redis cho thấy nó học `sentinel-2:26380` và master `redis-replica-2:6382` rồi vẫn dial được).
 
 ## Chaos test hoạt động thế nào
 
@@ -123,10 +123,19 @@ Test không dùng sleep cố định: mọi chỗ chờ dùng `eventually`.
 
 ## Kết quả đo
 
-Thời gian failover không được hard-code vì nó phụ thuộc máy và cấu hình.
-Với compose của handbook (`down-after-milliseconds 2000`, `failover-timeout 10000`) cận dưới là `down-after-milliseconds`, cộng thời gian bầu leader, promote và để client hỏi lại Sentinel.
-Test chaos in dòng `failover measured: first successful write N ms after the master stopped` (dùng `-t chaos` hoặc xem log của `vitest`, và `go test -v` cho Go), và demo in cùng con số kèm số lần ghi thất bại trước đó.
-Hãy chạy `make lab-ts LAB=04-redis-advanced/lab-01-sentinel` để xem con số trên máy của bạn.
+Thời gian failover phụ thuộc máy và cấu hình, nên đây là số đo một lần trên máy phát triển (Docker Desktop, Apple Silicon), chỉ để tham khảo.
+Với compose của handbook (`down-after-milliseconds 2000`, `failover-timeout 10000`), thời gian từ lúc dừng master tới lần ghi thành công đầu tiên đo được:
+
+| Công cụ                    | Lần ghi thành công đầu tiên sau khi dừng master |
+| -------------------------- | ----------------------------------------------- |
+| Test chaos TypeScript      | 3099 ms và 3196 ms (hai lần chạy)               |
+| Test chaos Go              | 2986 ms và 3134 ms (hai lần chạy)               |
+| Demo TypeScript và demo Go | 3654 ms và 3080 ms                              |
+
+Cận dưới là `down-after-milliseconds` (2000 ms), cộng thời gian bầu leader, promote và để client hỏi lại Sentinel.
+Test chaos in dòng `failover measured: ...` (TypeScript: `pnpm vitest run ... --reporter=verbose --silent=false`, Go: `go test -v`), và demo in cùng con số kèm số lần ghi thất bại trước đó.
+Hãy chạy lại trên máy của bạn để có số riêng.
+Với master bị dừng, ioredis báo vài lỗi kết nối (event `error`) trong lúc chờ, và test đếm chúng thay vì để ioredis log từng lỗi.
 
 ## Bài tập mở rộng
 

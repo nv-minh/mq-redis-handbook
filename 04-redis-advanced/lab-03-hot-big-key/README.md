@@ -67,6 +67,7 @@ Test không bao giờ khẳng định về kết quả quét toàn server, vì R
 
 `MEMORY USAGE` tính theo byte cả key, value và overhead của allocator, còn `redis-cli --bigkeys` đếm theo số phần tử.
 Một chuỗi 1 MiB và một list 10000 phần tử nhỏ (khoảng 1 MiB) đều là "big" theo bytes.
+Con số `MEMORY USAGE` cao hơn dữ liệu thô vì allocator làm tròn lên: demo đo một chuỗi `x` lặp 1 MiB là 1310770 byte, còn key nhỏ là 64 byte.
 
 `SCAN` không đảm bảo mỗi key xuất hiện đúng một lần, nên kết quả được loại trùng.
 Ngưỡng nên tương đối với dữ liệu của bạn: lab dùng 512 KiB giữa nhóm key nhỏ (vài chục byte) và key lớn (1 MiB).

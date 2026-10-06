@@ -89,7 +89,7 @@ Client trên host ánh xạ lại về `127.0.0.1` với cùng port:
 
 - ioredis: `new Cluster(seeds, { natMap })`.
 - go-redis không có `natMap`: `ClusterOptions.Dialer` nhận địa chỉ lấy từ slot map hoặc `MOVED` và dial địa chỉ đã ánh xạ.
-  Test `cluster_client_writes_keys_spread_over_all_masters` (`TestClusterClientWritesKeysSpreadOverAllMasters`) ghi và đọc 60 key rải trên cả 3 master, nên nếu `Dialer` không thay được `natMap` trên go-redis v9.23.0 thì test này fail.
+  Test `cluster_client_writes_keys_spread_over_all_masters` (`TestClusterClientWritesKeysSpreadOverAllMasters`) ghi và đọc 60 key rải trên cả 3 master, nên nếu `Dialer` không thay được `natMap` trên go-redis v9.23.0 thì test này fail, và test này pass trên go-redis v9.23.0.
 
 ## Chạy
 
@@ -120,4 +120,5 @@ Mọi key của test có tên duy nhất (`uniqueName`) và bị xóa khi test k
 1. Chạy `redis-cli --cluster reshard` chuyển một slot sang master khác (qua `docker compose exec`), rồi quan sát `MOVED` và `ASK` trong lúc client ghi.
 2. Viết reliable queue của lab 03 chủ đề 03 với tên key `{jobs}` và `{jobs}:processing:A` và kiểm tra `BLMOVE` chạy trên Cluster, còn tên key không có hash tag thì lỗi `CROSSSLOT`.
 3. Đếm phân phối slot của 10000 key ngẫu nhiên với `slotFor` và so với 3 master.
-4. Thử `SELECT 1` trên một node của cluster và đọc lỗi.
+4. Thay `CLUSTER SLOTS` trong `slotOwner` bằng `CLUSTER SHARDS` (Redis 7.0 trở lên) và so hình dạng reply.
+   Lab đã đo `SELECT 1` trên cluster trả `ERR SELECT is not allowed in cluster mode`.

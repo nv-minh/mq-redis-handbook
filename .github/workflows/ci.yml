@@ -1,0 +1,135 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # pnpm 11 (the version the lockfile and pnpm-workspace.yaml `allowBuilds` were made with).
+  PNPM_VERSION: "11.13.1"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Secrets are not allowed in step `if`, so expose them as env first. Both stay empty on forks and when unset.
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: pnpm install --frozen-lockfile
+      # Optional: raises the Docker Hub pull limit for `docker manifest inspect`. The workflow passes without the secrets
+      # (check-compose reports a rate limit as a failure because CHECK_COMPOSE_STRICT=1, so add them if it happens).
+      - name: Docker Hub login (optional)
+        if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
+        uses: docker/login-action@v4
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ env.DOCKERHUB_TOKEN }}
+      # Chromium on ubuntu runners cannot start its sandbox, so mmdc gets a puppeteer config with --no-sandbox.
+      - name: Puppeteer config for mmdc
+        run: |
+          echo '{"args": ["--no-sandbox"]}' > "$RUNNER_TEMP/puppeteer-config.json"
+          echo "MERMAID_PUPPETEER_CONFIG=$RUNNER_TEMP/puppeteer-config.json" >> "$GITHUB_ENV"
+      # eslint, prettier, tsc, golangci-lint, no-sleep gate, check-compose
+      - run: make lint
+        env:
+          CHECK_COMPOSE_STRICT: "1"
+      - run: make docs-check
+      - run: make mermaid-check
+      - run: make test-scripts
+
+  test-ts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Only the lint job renders diagrams, so skip the Chrome download here.
+      PUPPETEER_SKIP_DOWNLOAD: "true"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Base stack only (redis, rabbitmq, kafka, nats, postgres) on the default ports.
+      - run: make up
+      # Labs share one Redis, so test files run one at a time (fileParallelism: false in vitest.config.ts).
+      - run: make test-fast-ts
+      - name: Compose logs
+        if: failure()
+        run: docker compose -f infra/docker-compose.yml logs --no-color --tail 200
+      - run: make down
+        if: always()
+
+  test-go:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: make up
+      # -p 1: packages share one Redis (see the Makefile).
+      - run: make test-fast-go
+      - name: Compose logs
+        if: failure()
+        run: docker compose -f infra/docker-compose.yml logs --no-color --tail 200
+      - run: make down
+        if: always()
+
+  # Chapter 04 sentinel and cluster labs: the chaos tests stop and restart Redis containers, so they get their own
+  # job with both profiles. TypeScript and Go run one after the other because they share the topology.
+  test-chaos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: "true"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: pnpm install --frozen-lockfile
+      - run: make up PROFILE="sentinel cluster"
+      - name: Chaos tests (TypeScript)
+        run: make test-chaos-ts
+        timeout-minutes: 10
+      - name: Chaos tests (Go)
+        run: make test-chaos-go
+        timeout-minutes: 10
+      - name: Compose logs
+        if: failure()
+        run: docker compose -f infra/docker-compose.yml --profile sentinel --profile cluster logs --no-color --tail 200
+      - run: make down
+        if: always()

@@ -27,7 +27,7 @@ export interface DlqQueueOptions {
   blocking: Redis;
   /** Stream chính. */
   stream: string;
-  /** Consumer group. */
+  /** Tên consumer group. */
   group: string;
   /** Stream chứa các message đã bị loại (dead-letter). */
   dlqStream: string;

@@ -1,5 +1,5 @@
-// Command demo creates one 1 MiB value and many tiny keys under a unique prefix, finds the big
-// one with SCAN + MEMORY USAGE, then frees it with UNLINK. Only keys under the demo prefix are touched.
+// Command demo tạo một value 1 MiB và nhiều key nhỏ dưới một prefix duy nhất, tìm key lớn bằng
+// SCAN + MEMORY USAGE, rồi giải phóng bằng UNLINK. Demo chỉ đụng tới các key dưới prefix của nó.
 package main
 
 import (
@@ -34,12 +34,13 @@ func run() error {
 	rdb := redis.NewClient(opts)
 	defer func() { _ = rdb.Close() }()
 
+	fmt.Println("Demo tìm big key: 1000 key nhỏ và một chuỗi 1 MiB dưới cùng một prefix.")
 	prefix := testkit.UniqueName("demo:bigkey")
 	var created []string
-	// UNLINK frees the memory in a background thread. DEL on a big collection would block Redis.
+	// UNLINK giải phóng bộ nhớ ở thread nền, còn DEL trên collection lớn sẽ chặn Redis.
 	defer func() {
 		n, _ := rdb.Unlink(ctx, created...).Result()
-		fmt.Println("UNLINK removed:", n)
+		fmt.Println("UNLINK đã xóa:", n, "key")
 	}()
 
 	pipe := rdb.Pipeline()
@@ -59,14 +60,14 @@ func run() error {
 
 	small, _ := rdb.MemoryUsage(ctx, prefix+":small:0").Result()
 	big, _ := rdb.MemoryUsage(ctx, bigKey).Result()
-	fmt.Printf("MEMORY USAGE small key: %d bytes, big key: %d bytes\n", small, big)
+	fmt.Printf("MEMORY USAGE của key nhỏ: %d byte, của key lớn: %d byte (allocator làm tròn lên so với 1 MiB dữ liệu)\n", small, big)
 
 	started := time.Now()
 	found, err := lab.FindBigKeys(ctx, rdb, 512*1024, prefix+":*")
 	if err != nil {
 		return err
 	}
-	fmt.Printf("FindBigKeys(512 KiB, %q) -> %v in %d ms\n", prefix+":*", found, time.Since(started).Milliseconds())
-	fmt.Println("scanned 1001 keys, returned", len(found))
+	fmt.Printf("FindBigKeys(512 KiB, %q) -> %v trong %d ms\n", prefix+":*", found, time.Since(started).Milliseconds())
+	fmt.Println("Đã quét 1001 key, trả về", len(found), "key lớn: ngưỡng quyết định key nào được coi là big.")
 	return nil
 }

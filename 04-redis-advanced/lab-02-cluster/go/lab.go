@@ -1,6 +1,6 @@
-// Package lab computes Redis Cluster hash slots (CRC16 with hash tags) and connects a Go client
-// to the Docker cluster from the host. The nodes announce Docker DNS names, so the client needs a
-// Dialer that maps them to the ports published on 127.0.0.1.
+// Package lab tính hash slot của Redis Cluster (CRC16 kèm hash tag) và kết nối client Go
+// tới cluster Docker từ máy host. Các node tự khai địa chỉ bằng tên Docker DNS,
+// nên client cần một Dialer đổi tên đó sang port đã publish trên 127.0.0.1.
 package lab
 
 import (
@@ -14,11 +14,11 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// ClusterPorts are the six cluster nodes as the host reaches them (ports are published 1:1).
+// ClusterPorts là sáu node cluster như máy host nhìn thấy (port được publish 1:1 nên trùng với port trong container).
 var ClusterPorts = []int{7001, 7002, 7003, 7004, 7005, 7006}
 
-// natMap rewrites every node address the cluster announces (redis-cluster-1:7001) to the
-// published port on localhost. go-redis has no natMap option, so the rewrite lives in Dialer.
+// natMap đổi mọi địa chỉ node mà cluster báo (redis-cluster-1:7001) sang port đã publish trên localhost.
+// go-redis không có option natMap, nên việc đổi địa chỉ nằm trong Dialer.
 var natMap = func() map[string]string {
 	m := map[string]string{}
 	for i, port := range ClusterPorts {
@@ -27,7 +27,7 @@ var natMap = func() map[string]string {
 	return m
 }()
 
-// HostAddr maps an announced address (redis-cluster-2:7002) to the address the host can dial.
+// HostAddr đổi địa chỉ node tự khai (redis-cluster-2:7002) sang địa chỉ mà máy host dial được.
 func HostAddr(announced string) string {
 	if mapped, ok := natMap[announced]; ok {
 		return mapped
@@ -35,14 +35,14 @@ func HostAddr(announced string) string {
 	return announced
 }
 
-// Dialer is the go-redis substitute for ioredis natMap: ClusterOptions.Dialer receives the
-// address from CLUSTER SLOTS or MOVED and dials its mapped host address instead.
+// Dialer là cách go-redis thay cho natMap của ioredis: ClusterOptions.Dialer nhận địa chỉ lấy từ
+// CLUSTER SLOTS hoặc MOVED và dial địa chỉ host tương ứng thay vào đó.
 func Dialer(ctx context.Context, network, addr string) (net.Conn, error) {
 	d := net.Dialer{Timeout: 2 * time.Second}
 	return d.DialContext(ctx, network, HostAddr(addr))
 }
 
-// ConnectCluster returns a cluster client that follows MOVED and refreshes its slot map.
+// ConnectCluster trả về cluster client tự theo MOVED và làm mới slot map.
 func ConnectCluster() *redis.ClusterClient {
 	addrs := make([]string, 0, 3)
 	for _, port := range ClusterPorts[:3] {
@@ -57,7 +57,7 @@ func ConnectCluster() *redis.ClusterClient {
 
 const slots = 16384
 
-// crcTable is CRC16/XMODEM (poly 0x1021, init 0, no reflection, xorout 0), the variant Redis Cluster uses.
+// crcTable là bảng của CRC16/XMODEM (poly 0x1021, init 0, không reflect, xorout 0), biến thể mà Redis Cluster dùng.
 var crcTable = func() [256]uint16 {
 	var table [256]uint16
 	for b := range table {
@@ -82,39 +82,40 @@ func crc16(data []byte) uint16 {
 	return crc
 }
 
-// hashPart returns the part of the key that is hashed. If the key has a `{`, a `}` after it,
-// and at least one byte between the FIRST `{` and the first `}` after it, only that part is
-// hashed. Otherwise (no `{`, no `}` after it, or `{}`) the whole key is hashed.
+// hashPart trả về phần của key được đem đi băm.
+// Nếu key có `{`, có `}` đứng sau nó, và có ít nhất một byte giữa `{` ĐẦU TIÊN và `}` đầu tiên sau nó
+// thì chỉ phần đó được băm.
+// Ngược lại (không có `{`, không có `}` phía sau, hoặc tag rỗng `{}`) thì băm cả key.
 func hashPart(key []byte) []byte {
 	open := bytes.IndexByte(key, '{')
 	if open < 0 {
 		return key
 	}
 	closeAt := bytes.IndexByte(key[open+1:], '}')
-	if closeAt <= 0 { // no closing brace, or "{}"
+	if closeAt <= 0 { // không có dấu } đóng, hoặc tag rỗng "{}"
 		return key
 	}
 	return key[open+1 : open+1+closeAt]
 }
 
-// SlotFor is the hash slot of a key: CRC16(hashed part) mod 16384, the same value as CLUSTER KEYSLOT.
-// It works on the bytes of the string, like Redis.
+// SlotFor là hash slot của một key: CRC16(phần được băm) mod 16384, cùng giá trị với CLUSTER KEYSLOT.
+// Hàm làm việc trên byte của string như Redis, nên key không phải ASCII hay không hợp lệ UTF-8 vẫn đúng.
 func SlotFor(key string) int {
 	return int(crc16(hashPart([]byte(key))) % slots)
 }
 
-// SlotOwner returns the master that owns slot, as the cluster announces it ("redis-cluster-2:7002").
+// SlotOwner trả về master sở hữu slot, theo lời cluster báo ("redis-cluster-2:7002"), chưa đổi sang localhost.
 func SlotOwner(ctx context.Context, slot int) (string, error) {
-	lastErr := errors.New("no cluster node configured")
+	lastErr := errors.New("chưa cấu hình node cluster nào")
 	for _, port := range ClusterPorts {
-		// Protocol 2: CLUSTER SLOTS replies as plain nested arrays.
+		// Protocol 2: CLUSTER SLOTS trả mảng lồng nhau thuần.
 		node := redis.NewClient(&redis.Options{
 			Addr:        fmt.Sprintf("127.0.0.1:%d", port),
 			Protocol:    2,
 			DialTimeout: time.Second,
 			MaxRetries:  -1,
 		})
-		// Raw CLUSTER SLOTS: [[start, end, [host, port, id, ...], replica...], ...]
+		// Dùng lệnh thô vì CLUSTER SLOTS có kiểu typed đã deprecated: [[start, end, [host, port, id, ...], replica...], ...]
 		ranges, err := node.WithTimeout(2*time.Second).Do(ctx, "CLUSTER", "SLOTS").Slice()
 		_ = node.Close()
 		if err != nil {
@@ -134,7 +135,7 @@ func SlotOwner(ctx context.Context, slot int) (string, error) {
 			}
 			return net.JoinHostPort(fmt.Sprint(master[0]), fmt.Sprint(master[1])), nil
 		}
-		return "", fmt.Errorf("slot %d is not covered by any master", slot)
+		return "", fmt.Errorf("slot %d chưa có master nào sở hữu", slot)
 	}
 	return "", lastErr
 }

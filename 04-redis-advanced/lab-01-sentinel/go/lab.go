@@ -1,6 +1,6 @@
-// Package lab connects a Go client to Redis Sentinel from the host and reads what Sentinel
-// believes about the topology. The nodes announce Docker DNS names, so the client needs a Dialer
-// that maps them to the ports published on 127.0.0.1.
+// Package lab kết nối client Go tới Redis Sentinel từ máy host và đọc điều Sentinel tin về topology.
+// Các node tự khai địa chỉ bằng tên Docker DNS, nên client cần một Dialer đổi tên đó
+// sang port đã publish trên 127.0.0.1.
 package lab
 
 import (
@@ -14,16 +14,16 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// MasterName is the name of the monitored master in the sentinel config of infra/docker-compose.yml.
+// MasterName là tên master mà Sentinel giám sát, đặt trong cấu hình sentinel của infra/docker-compose.yml.
 const MasterName = "mymaster"
 
-// SentinelAddrs are the three sentinels as the host reaches them (ports are published 1:1).
+// SentinelAddrs là ba sentinel như máy host nhìn thấy (port được publish 1:1 nên trùng với port trong container).
 var SentinelAddrs = []string{"127.0.0.1:26379", "127.0.0.1:26380", "127.0.0.1:26381"}
 
-// natMap rewrites every address Sentinel announces (a Docker DNS name) to the published port on
-// localhost. go-redis has no natMap option, so the rewrite lives in Dialer below. It lists the
-// sentinels too: go-redis learns the other sentinels from SENTINEL SENTINELS and dials them with
-// the same Dialer.
+// natMap đổi mọi địa chỉ mà Sentinel báo (tên Docker DNS) sang port đã publish trên localhost.
+// go-redis không có option natMap, nên việc đổi địa chỉ nằm trong Dialer bên dưới.
+// Bảng liệt kê cả sentinel: go-redis học danh sách sentinel còn lại từ SENTINEL SENTINELS
+// và dial chúng bằng chính Dialer này.
 var natMap = map[string]string{
 	"redis-master:6380":    "127.0.0.1:6380",
 	"redis-replica-1:6381": "127.0.0.1:6381",
@@ -33,7 +33,7 @@ var natMap = map[string]string{
 	"sentinel-3:26381":     "127.0.0.1:26381",
 }
 
-// HostAddr maps an announced address (redis-master:6380) to the address the host can dial.
+// HostAddr đổi địa chỉ node tự khai (redis-master:6380) sang địa chỉ mà máy host dial được.
 func HostAddr(announced string) string {
 	if mapped, ok := natMap[announced]; ok {
 		return mapped
@@ -41,35 +41,35 @@ func HostAddr(announced string) string {
 	return announced
 }
 
-// Dialer is the go-redis substitute for ioredis natMap: FailoverOptions.Dialer receives the
-// address that Sentinel announced and dials its mapped host address instead.
+// Dialer là cách go-redis thay cho natMap của ioredis: FailoverOptions.Dialer nhận địa chỉ mà Sentinel đã báo
+// và dial địa chỉ host tương ứng thay vào đó.
 func Dialer(ctx context.Context, network, addr string) (net.Conn, error) {
 	d := net.Dialer{Timeout: 2 * time.Second}
 	return d.DialContext(ctx, network, HostAddr(addr))
 }
 
-// ConnectViaSentinel returns a client that always talks to the current master: it asks the
-// sentinels where the master is, connects, and asks again on every new connection, so after a
-// failover it follows the promoted node without a restart.
+// ConnectViaSentinel trả về client luôn nói chuyện với master hiện tại.
+// Nó hỏi các sentinel master đang ở đâu, kết nối, và hỏi lại ở mỗi connection mới,
+// nên sau failover nó tự đi theo node vừa được promote mà không cần khởi động lại.
 func ConnectViaSentinel() *redis.Client {
 	return redis.NewFailoverClient(&redis.FailoverOptions{
 		MasterName:    MasterName,
 		SentinelAddrs: SentinelAddrs,
 		Dialer:        Dialer,
 		DialTimeout:   2 * time.Second,
-		// Keep retrying through the failover instead of failing the command at once.
+		// Retry xuyên qua failover thay vì trả lỗi ngay cho lệnh đang chạy.
 		MaxRetries:      10,
 		MinRetryBackoff: 100 * time.Millisecond,
 		MaxRetryBackoff: 500 * time.Millisecond,
 	})
 }
 
-// withSentinel runs fn against the first sentinel that answers.
+// withSentinel chạy fn trên sentinel đầu tiên trả lời được, bỏ qua sentinel đang chết.
 func withSentinel[T any](ctx context.Context, fn func(*redis.Client) (T, error)) (T, error) {
 	var zero T
-	lastErr := errors.New("no sentinel configured")
+	lastErr := errors.New("chưa cấu hình sentinel nào")
 	for _, addr := range SentinelAddrs {
-		// Protocol 2: SENTINEL replies are flat arrays of field/value pairs.
+		// Protocol 2: reply của SENTINEL là mảng phẳng các cặp field/value (RESP3 trả dạng khác).
 		client := redis.NewClient(&redis.Options{
 			Addr:        addr,
 			Protocol:    2,
@@ -89,7 +89,7 @@ func withSentinel[T any](ctx context.Context, fn func(*redis.Client) (T, error))
 func pairs(reply any) (map[string]string, error) {
 	flat, ok := reply.([]any)
 	if !ok {
-		return nil, fmt.Errorf("unexpected reply %T", reply)
+		return nil, fmt.Errorf("reply không như mong đợi: %T", reply)
 	}
 	out := map[string]string{}
 	for i := 0; i+1 < len(flat); i += 2 {
@@ -98,7 +98,7 @@ func pairs(reply any) (map[string]string, error) {
 	return out, nil
 }
 
-// CurrentMaster returns the master as Sentinel announces it ("redis-master:6380"), not mapped.
+// CurrentMaster trả về master theo lời Sentinel báo ("redis-master:6380"), chưa đổi sang localhost.
 func CurrentMaster(ctx context.Context) (string, error) {
 	return withSentinel(ctx, func(s *redis.Client) (string, error) {
 		reply, err := s.Do(ctx, "SENTINEL", "get-master-addr-by-name", MasterName).Slice()
@@ -106,36 +106,36 @@ func CurrentMaster(ctx context.Context) (string, error) {
 			return "", err
 		}
 		if len(reply) != 2 {
-			return "", fmt.Errorf("sentinel does not know master %s", MasterName)
+			return "", fmt.Errorf("sentinel không biết master %s", MasterName)
 		}
 		return net.JoinHostPort(fmt.Sprint(reply[0]), fmt.Sprint(reply[1])), nil
 	})
 }
 
-// ReplicaState is what Sentinel reports about one replica.
+// ReplicaState là điều Sentinel báo về một replica.
 type ReplicaState struct {
-	// Addr is the announced address, "redis-replica-1:6381".
+	// Addr là địa chỉ replica tự khai, ví dụ "redis-replica-1:6381".
 	Addr string
-	// Flags are the Sentinel flags, for example "slave" or "slave,s_down,disconnected".
+	// Flags là cờ Sentinel, ví dụ "slave" hoặc "slave,s_down,disconnected".
 	Flags string
-	// LinkStatus is the replication link to the master as the replica reports it.
+	// LinkStatus là trạng thái link replication tới master do chính replica báo ("ok" là khỏe).
 	LinkStatus string
-	// MasterHost is the host of the master this replica says it follows.
+	// MasterHost là host của master mà replica này nói là nó đang theo.
 	MasterHost string
 }
 
-// Topology is what one sentinel believes about the master, its replicas and the other sentinels.
+// Topology là điều một sentinel tin về master, các replica và các sentinel khác.
 type Topology struct {
 	Master      string
 	MasterFlags string
-	// Replicas lists the announced address of every replica.
+	// Replicas liệt kê địa chỉ tự khai của từng replica.
 	Replicas []string
 	States   []ReplicaState
-	// Sentinels counts the sentinels that see each other, including the one asked.
+	// Sentinels là số sentinel thấy nhau, tính cả sentinel được hỏi.
 	Sentinels int
 }
 
-// ReadTopology asks the first sentinel that answers.
+// ReadTopology hỏi sentinel đầu tiên trả lời được.
 func ReadTopology(ctx context.Context) (Topology, error) {
 	return withSentinel(ctx, func(s *redis.Client) (Topology, error) {
 		var t Topology
@@ -174,7 +174,7 @@ func ReadTopology(ctx context.Context) (Topology, error) {
 	})
 }
 
-// Healthy means: one plain master, two plain replicas linked to it, three sentinels.
+// Healthy nghĩa là: một master bình thường, hai replica bình thường đã nối tới đúng master đó, và đủ ba sentinel.
 func (t Topology) Healthy() bool {
 	if t.MasterFlags != "master" || t.Sentinels != 3 || len(t.States) != 2 {
 		return false
@@ -188,7 +188,7 @@ func (t Topology) Healthy() bool {
 	return true
 }
 
-// ServiceOf returns the compose service of a node: the announced host is the service name.
+// ServiceOf trả về compose service của một node: host mà node tự khai chính là tên service.
 func ServiceOf(announced string) string {
 	host, _, err := net.SplitHostPort(announced)
 	if err != nil {

@@ -4,16 +4,18 @@ import { promisify } from "node:util";
 
 const run = promisify(execFile);
 
-/** The compose project of this handbook. Chaos never touches a container outside it. */
+/** Compose project của handbook. Chaos không bao giờ đụng tới container nằm ngoài project này. */
 const PROJECT = "mq-handbook";
 const COMPOSE_FILE = fileURLToPath(new URL("../../../infra/docker-compose.yml", import.meta.url));
 
-/** The only services chaos may stop: the three Redis nodes of the sentinel profile. */
+/** Chỉ ba node Redis của profile sentinel mới được phép dừng. */
 export const CHAOS_SERVICES = ["redis-master", "redis-replica-1", "redis-replica-2"] as const;
 
 function compose(action: "stop" | "start", service: string): Promise<unknown> {
   if (!(CHAOS_SERVICES as readonly string[]).includes(service)) {
-    throw new Error(`refusing to ${action} "${service}": not one of ${CHAOS_SERVICES.join(", ")}`);
+    throw new Error(
+      `từ chối ${action} "${service}": chỉ được phép với ${CHAOS_SERVICES.join(", ")}`,
+    );
   }
   const extra = action === "stop" ? ["-t", "1"] : [];
   return run("docker", ["compose", "-p", PROJECT, "-f", COMPOSE_FILE, action, ...extra, service], {
@@ -21,8 +23,8 @@ function compose(action: "stop" | "start", service: string): Promise<unknown> {
   });
 }
 
-/** Stop one sentinel-profile Redis node (SIGTERM, one second grace) through docker compose. */
+/** Dừng một node Redis của profile sentinel qua docker compose (SIGTERM, chờ tối đa một giây). */
 export const stopService = (service: string): Promise<unknown> => compose("stop", service);
 
-/** Start a node that was stopped. Safe to call for a node that is already running. */
+/** Bật lại node đã dừng. Gọi cho node đang chạy cũng an toàn. */
 export const startService = (service: string): Promise<unknown> => compose("start", service);

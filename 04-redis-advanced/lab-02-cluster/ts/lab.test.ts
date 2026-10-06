@@ -4,9 +4,9 @@ import { uniqueName, waitForPort } from "@handbook/testkit";
 import { CLUSTER_PORTS, connectCluster, hostAddress, slotFor, slotOwner } from "./lab.js";
 
 const HINT =
-  'Redis Cluster is not up. Start both topologies with: make up PROFILE="sentinel cluster"';
+  'Redis Cluster chưa chạy. Hãy bật cả hai topology bằng lệnh: make up PROFILE="sentinel cluster"';
 
-// Fail fast with a clear message when the cluster profile is not running.
+// Fail fast: nếu profile cluster chưa chạy thì dừng ngay và nói rõ cần bật gì, thay vì treo tới timeout.
 beforeAll(async () => {
   try {
     for (const port of CLUSTER_PORTS) await waitForPort("127.0.0.1", port, 3_000);
@@ -17,7 +17,8 @@ beforeAll(async () => {
   }
 }, 30_000);
 
-// Direct connection to ONE node. protocol 2 keeps CLUSTER SLOTS replies as plain nested arrays.
+// Connection trực tiếp tới MỘT node, không đi qua cluster client nên không tự theo MOVED.
+// protocol 2 giữ reply của CLUSTER SLOTS ở dạng mảng lồng nhau thuần.
 const direct = (port: number) => new Redis({ host: "127.0.0.1", port, protocol: 2 });
 
 const nodes: Redis[] = [];
@@ -25,7 +26,7 @@ const clusters: Cluster[] = [];
 const createdKeys: string[] = [];
 
 async function cleanup(): Promise<void> {
-  // DEL on a cluster is single-slot per command, so delete key by key through a cluster client.
+  // DEL nhiều key khác slot sẽ lỗi CROSSSLOT, nên xóa từng key một qua cluster client (nó tự tìm đúng master).
   if (createdKeys.length > 0) {
     const cluster = connectCluster();
     try {
@@ -52,22 +53,22 @@ describe("lab-02 cluster: hash slots", () => {
       "user:1000",
       "",
       "a",
-      // hash tag rules from the cluster spec
+      // quy tắc hash tag theo cluster spec
       "{user1000}.following",
       "{user1000}.followers",
-      "foo{}{bar}", // empty tag: the whole key is hashed
-      "foo{{bar}}zap", // the tag is "{bar"
-      "foo{bar}{zap}", // first tag wins: "bar"
-      "{}foo", // key starting with {} hashes the whole key
-      "foo{bar", // no closing brace: the whole key is hashed
-      "foo}bar{", // closing brace before opening brace
+      "foo{}{bar}", // tag rỗng: băm cả key
+      "foo{{bar}}zap", // tag là "{bar"
+      "foo{bar}{zap}", // tag đầu tiên thắng: "bar"
+      "{}foo", // key bắt đầu bằng {} thì băm cả key
+      "foo{bar", // không có dấu } đóng: băm cả key
+      "foo}bar{", // dấu } đứng trước dấu {
       "{",
       "}",
       "{}",
-      "{{}}", // tag is "{"
+      "{{}}", // tag là "{"
       "{a}",
       "a{b}c{d}e",
-      // non-ASCII: the hash runs over the UTF-8 bytes, not over UTF-16 code units
+      // không phải ASCII: hash chạy trên byte UTF-8, không phải trên đơn vị UTF-16 của chuỗi JavaScript
       "khóa",
       "日本語",
       "{日本}語",
@@ -79,7 +80,7 @@ describe("lab-02 cluster: hash slots", () => {
       const expected = Number(await node.call("CLUSTER", "KEYSLOT", key));
       expect(slotFor(key), `slotFor(${JSON.stringify(key)})`).toBe(expected);
     }
-    // CRC16/XMODEM check value from the cluster spec: CRC16("123456789") = 0x31C3.
+    // Check value của CRC16/XMODEM theo cluster spec: CRC16("123456789") = 0x31C3.
     expect(slotFor("123456789")).toBe(0x31c3 % 16384);
   });
 
@@ -88,7 +89,7 @@ describe("lab-02 cluster: hash slots", () => {
     expect(slotFor("{user1000}.following")).toBe(slotFor("user1000"));
     expect(slotFor("foo{bar}{zap}")).toBe(slotFor("bar"));
     expect(slotFor("foo{{bar}}zap")).toBe(slotFor("{bar"));
-    // Empty tag, unclosed tag and a leading {} hash the whole key.
+    // Tag rỗng, tag không đóng và key bắt đầu bằng {} đều băm cả key, nên slot khác slot của phần trong ngoặc.
     expect(slotFor("foo{}{bar}")).not.toBe(slotFor("bar"));
     expect(slotFor("foo{bar")).not.toBe(slotFor("bar"));
     expect(slotFor("{}foo")).not.toBe(slotFor("foo"));
@@ -105,11 +106,11 @@ describe("lab-02 cluster: hash slots", () => {
       expect(Number(await node.call("CLUSTER", "KEYSLOT", key))).toBe(slotFor(`{${tag}}`));
       expect(slotFor(key)).toBe(slotFor(`{${tag}}`));
     }
-    // Without a tag the same suffixes spread over slots (fixed names, known to differ).
+    // Không có hash tag thì các key cùng hậu tố vẫn rải ra nhiều slot (tên cố định, đã biết là khác nhau).
     expect(slotFor("{alpha}:pending")).not.toBe(slotFor("{beta}:pending"));
     expect(slotFor("alpha:pending")).not.toBe(slotFor("alpha:processing"));
 
-    // A multi-key command on keys of one slot works through the cluster client.
+    // Lệnh multi-key trên các key cùng một slot chạy được qua cluster client.
     const cluster = connectCluster();
     clusters.push(cluster);
     createdKeys.push(...sameTag);
@@ -118,7 +119,7 @@ describe("lab-02 cluster: hash slots", () => {
   });
 
   it("multi_key_command_across_slots_fails_with_crossslot", async () => {
-    // Two keys with different slots.
+    // Hai key khác slot (tăng hậu tố tới khi slot khác nhau).
     const prefix = uniqueName("lab04-cross");
     const a = `${prefix}-a`;
     let b = `${prefix}-b`;
@@ -126,7 +127,8 @@ describe("lab-02 cluster: hash slots", () => {
     expect(slotFor(a)).not.toBe(slotFor(b));
     createdKeys.push(a, b);
 
-    // Send MSET to ONE node over a direct connection: CROSSSLOT is checked before MOVED.
+    // Gửi MSET tới MỘT node qua connection trực tiếp: server kiểm tra CROSSSLOT trước MOVED,
+    // nên lỗi này đến từ bất kỳ node nào kể cả node không sở hữu slot của key.
     const node = direct(7001);
     nodes.push(node);
     const error = await node.mset(a, "1", b, "2").then(
@@ -136,7 +138,7 @@ describe("lab-02 cluster: hash slots", () => {
     expect(error).toBeInstanceOf(Error);
     expect(error?.message.startsWith("CROSSSLOT")).toBe(true);
 
-    // The same keys under one hash tag succeed on the node that owns the slot.
+    // Cùng kiểu key nhưng chung một hash tag thì thành công trên node sở hữu slot đó.
     const tag = uniqueName("lab04-tagged");
     const tagged = [`{${tag}}:a`, `{${tag}}:b`];
     createdKeys.push(...tagged);
@@ -147,7 +149,8 @@ describe("lab-02 cluster: hash slots", () => {
     expect(await ownerNode.mset(tagged[0]!, "1", tagged[1]!, "2")).toBe("OK");
     expect(await ownerNode.mget(...tagged)).toEqual(["1", "2"]);
 
-    // Any other node (a master of another shard or a replica) answers MOVED for a write to this slot.
+    // Node khác (master của shard khác hoặc replica) trả MOVED cho lệnh ghi vào slot này,
+    // kèm địa chỉ Docker DNS của node sở hữu.
     const otherPort = CLUSTER_PORTS.find((p) => p !== hostAddress(owner).port)!;
     const stranger = direct(otherPort);
     nodes.push(stranger);
@@ -159,7 +162,8 @@ describe("lab-02 cluster: hash slots", () => {
   });
 
   it("cluster_client_writes_keys_spread_over_all_masters", async () => {
-    // Proves natMap: after CLUSTER SLOTS the client dials redis-cluster-N:700N, which must map to localhost.
+    // Chứng minh natMap: sau CLUSTER SLOTS client dial redis-cluster-N:700N, tên này phải được đổi về localhost.
+    // 60 key rải trên cả 3 master nên client buộc phải nối tới đủ ba node.
     const cluster = connectCluster();
     clusters.push(cluster);
     const prefix = uniqueName("lab04-spread");

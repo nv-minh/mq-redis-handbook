@@ -133,7 +133,7 @@ Với compose của handbook (`down-after-milliseconds 2000`, `failover-timeout 
 | Demo TypeScript và demo Go | 3654 ms và 3080 ms                              |
 
 Cận dưới là `down-after-milliseconds` (2000 ms), cộng thời gian bầu leader, promote và để client hỏi lại Sentinel.
-Test chaos in dòng `failover measured: ...` (TypeScript: `pnpm vitest run ... --reporter=verbose --silent=false`, Go: `go test -v`), và demo in cùng con số kèm số lần ghi thất bại trước đó.
+Test chaos in dòng `Đo failover: ...` (TypeScript: `pnpm vitest run ... --reporter=verbose --silent=false`, Go: `go test -v`), và demo in cùng con số kèm số lần ghi thất bại trước đó.
 Hãy chạy lại trên máy của bạn để có số riêng.
 Với master bị dừng, ioredis báo vài lỗi kết nối (event `error`) trong lúc chờ, và test đếm chúng thay vì để ioredis log từng lỗi.
 

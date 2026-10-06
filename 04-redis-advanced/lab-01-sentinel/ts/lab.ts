@@ -1,6 +1,6 @@
 import { Redis, type RedisOptions } from "ioredis";
 
-/** Name given to the monitored master in the sentinel config of infra/docker-compose.yml. */
+/** Tên master mà Sentinel giám sát, đặt trong cấu hình sentinel của infra/docker-compose.yml. */
 export const MASTER_NAME = "mymaster";
 
 export interface Address {
@@ -8,7 +8,7 @@ export interface Address {
   port: number;
 }
 
-/** The three sentinels as the host reaches them (ports are published 1:1). */
+/** Ba sentinel như máy host nhìn thấy (port được publish 1:1 nên trùng với port trong container). */
 export const SENTINELS: Address[] = [
   { host: "127.0.0.1", port: 26379 },
   { host: "127.0.0.1", port: 26380 },
@@ -16,10 +16,10 @@ export const SENTINELS: Address[] = [
 ];
 
 /**
- * Sentinel and the Redis nodes announce Docker DNS names (redis-master:6380), which the host
- * cannot resolve. natMap rewrites every announced address to the published port on localhost.
- * It must list the sentinels too: ioredis learns the other sentinels from SENTINEL SENTINELS
- * and would otherwise try to dial sentinel-2:26380.
+ * Sentinel và các node Redis tự khai địa chỉ bằng tên Docker DNS (redis-master:6380), máy host không phân giải được tên này.
+ * natMap đổi mọi địa chỉ đã khai sang port đã publish trên localhost.
+ * Bảng phải liệt kê cả sentinel: ioredis học danh sách sentinel còn lại từ SENTINEL SENTINELS
+ * và nếu thiếu bảng cho chúng thì nó sẽ cố dial sentinel-2:26380, địa chỉ không tồn tại trên host.
  */
 export const NAT_MAP: Record<string, Address> = {
   "redis-master:6380": { host: "127.0.0.1", port: 6380 },
@@ -30,36 +30,37 @@ export const NAT_MAP: Record<string, Address> = {
   "sentinel-3:26381": { host: "127.0.0.1", port: 26381 },
 };
 
-/** Map an announced address (redis-master:6380) to the address the host can dial. */
+/** Đổi địa chỉ node tự khai (redis-master:6380) sang địa chỉ mà máy host dial được. */
 export function hostAddress(announced: Address): Address {
   return NAT_MAP[`${announced.host}:${announced.port}`] ?? announced;
 }
 
 /**
- * A client that always talks to the current master: it asks the sentinels where the master is
- * (SENTINEL get-master-addr-by-name), connects, and asks again on every reconnect, so after a
- * failover it follows the newly promoted node without a restart. `extra` overrides any option.
+ * Client luôn nói chuyện với master hiện tại.
+ * Nó hỏi các sentinel master đang ở đâu (SENTINEL get-master-addr-by-name), kết nối, và hỏi lại ở mỗi lần reconnect,
+ * nên sau failover nó tự đi theo node vừa được promote mà không cần khởi động lại.
+ * `extra` ghi đè bất kỳ option nào (ví dụ commandTimeout trong test chaos).
  */
 export function connectViaSentinel(extra: Partial<RedisOptions> = {}): Redis {
   return new Redis({
     sentinels: SENTINELS,
     name: MASTER_NAME,
     natMap: NAT_MAP,
-    // Short sentinel timeouts: a stopped sentinel must not stall discovery.
+    // Timeout ngắn khi hỏi sentinel: một sentinel đang chết không được làm chậm việc tìm master.
     sentinelCommandTimeout: 1_000,
     connectTimeout: 2_000,
-    // Retry forever with a short backoff: the client rides out the failover instead of flushing commands.
+    // Retry không giới hạn với backoff ngắn: client chờ qua failover thay vì trả lỗi cho các lệnh đang đợi.
     sentinelRetryStrategy: (times) => Math.min(times * 100, 500),
     retryStrategy: (times) => Math.min(times * 100, 500),
     ...extra,
   });
 }
 
-/** Run `fn` against the first sentinel that answers. */
+/** Chạy `fn` trên sentinel đầu tiên trả lời được, bỏ qua sentinel đang chết. */
 async function withSentinel<T>(fn: (sentinel: Redis) => Promise<T>): Promise<T> {
-  let lastError: unknown = new Error("no sentinel configured");
+  let lastError: unknown = new Error("chưa cấu hình sentinel nào");
   for (const address of SENTINELS) {
-    // protocol 2: SENTINEL replies are flat arrays of field/value pairs.
+    // protocol 2: reply của SENTINEL là mảng phẳng các cặp field/value (RESP3 sẽ trả dạng khác).
     const sentinel = new Redis({
       ...address,
       protocol: 2,
@@ -88,22 +89,22 @@ function pairs(reply: unknown): Record<string, string> {
   return out;
 }
 
-/** The master as Sentinel announces it (a Docker DNS name, not mapped to localhost). */
+/** Master theo lời Sentinel báo (tên Docker DNS, chưa đổi sang localhost). */
 export async function currentMaster(): Promise<Address> {
   return withSentinel(async (sentinel) => {
     const reply = (await sentinel.call("SENTINEL", "get-master-addr-by-name", MASTER_NAME)) as
       [string, string] | null;
-    if (reply === null) throw new Error(`sentinel does not know master ${MASTER_NAME}`);
+    if (reply === null) throw new Error(`sentinel không biết master ${MASTER_NAME}`);
     return { host: reply[0], port: Number(reply[1]) };
   });
 }
 
 export interface ReplicaState extends Address {
-  /** Sentinel flags of the replica, for example "slave" or "slave,s_down,disconnected". */
+  /** Cờ Sentinel của replica, ví dụ "slave" hoặc "slave,s_down,disconnected". */
   flags: string;
-  /** Replication link of the replica to its master as the replica reports it. */
+  /** Trạng thái link replication tới master do chính replica báo ("ok" là khỏe). */
   linkStatus: string;
-  /** Host of the master this replica says it follows. */
+  /** Host của master mà replica này nói là nó đang theo. */
   masterHost: string;
 }
 
@@ -111,11 +112,11 @@ export interface Topology {
   master: Address;
   masterFlags: string;
   replicas: ReplicaState[];
-  /** Number of sentinels that see each other, including the one asked. */
+  /** Số sentinel thấy nhau, tính cả sentinel được hỏi. */
   sentinels: number;
 }
 
-/** What one sentinel believes about the master, its replicas and the other sentinels. */
+/** Điều một sentinel tin về master, các replica và các sentinel khác. */
 export async function readTopology(): Promise<Topology> {
   return withSentinel(async (sentinel) => {
     const master = pairs(await sentinel.call("SENTINEL", "master", MASTER_NAME));
@@ -137,7 +138,7 @@ export async function readTopology(): Promise<Topology> {
   });
 }
 
-/** Healthy means: one plain master, two plain replicas linked to it, three sentinels. */
+/** Khỏe nghĩa là: một master bình thường, hai replica bình thường đã nối tới đúng master đó, và đủ ba sentinel. */
 export function isHealthy(topology: Topology): boolean {
   return (
     topology.masterFlags === "master" &&

@@ -13,9 +13,10 @@ import {
 import { startService, stopService } from "./chaos.js";
 
 const HINT =
-  'Redis Sentinel is not up. Start both topologies with: make up PROFILE="sentinel cluster"';
+  'Redis Sentinel chưa chạy. Hãy bật cả hai topology bằng lệnh: make up PROFILE="sentinel cluster"';
 
-// Fail fast with a clear message when the sentinel profile is not running.
+// Fail fast: nếu profile sentinel chưa chạy thì dừng ngay và nói rõ cần bật gì, thay vì treo tới timeout.
+// Test này cần cả sentinel lẫn cluster (chủ đề 04 dùng chung một lệnh make up).
 beforeAll(async () => {
   try {
     for (const { port } of SENTINELS) await waitForPort("127.0.0.1", port, 3_000);
@@ -27,7 +28,7 @@ beforeAll(async () => {
   }
 }, 30_000);
 
-/** Wait until Sentinel sees 1 master + 2 replicas, all reachable, and 3 sentinels. */
+/** Chờ tới khi Sentinel thấy đúng 1 master, 2 replica nối được và đủ 3 sentinel (topology khỏe). */
 async function waitForHealthyTopology(timeoutMs = 90_000): Promise<void> {
   await eventually(async () => isHealthy(await readTopology()), { timeoutMs, intervalMs: 500 });
 }
@@ -50,7 +51,8 @@ describe("lab-01 sentinel: client discovery", () => {
     await client.set(key, "hello");
     expect(await client.get(key)).toBe("hello");
 
-    // The connection must be the master and its address must be the one Sentinel announces.
+    // Connection của client phải là master, và master đó phải đúng là node mà Sentinel đang báo.
+    // Client chạy trên host nên địa chỉ Docker DNS (redis-master:6380) được đổi về 127.0.0.1 bằng natMap.
     const role = (await client.role()) as unknown[];
     expect(role[0]).toBe("master");
     const master = hostAddress(await currentMaster());
@@ -71,14 +73,17 @@ describe("lab-01 sentinel: client discovery", () => {
 });
 
 describe("chaos", () => {
-  // Every service this file stops is restored here, even when the test failed half way.
+  // Mọi service mà test chaos đã dừng đều được start lại ở afterEach, kể cả khi test lỗi giữa chừng.
+  // Nhờ vậy một test hỏng không để lại topology thiếu node cho test sau.
   const stopped: string[] = [];
   const clients: Redis[] = [];
   const keys: string[] = [];
 
   async function stopCurrentMaster(): Promise<Address> {
     const master = await currentMaster();
-    stopped.push(master.host); // announced host == compose service name
+    // Ghi nhận TRƯỚC khi dừng để afterEach luôn khôi phục được.
+    // Host mà Sentinel báo chính là tên service trong compose (redis-master, redis-replica-1, ...).
+    stopped.push(master.host);
     await stopService(master.host);
     return master;
   }
@@ -93,7 +98,8 @@ describe("chaos", () => {
       }
     }
     await waitForHealthyTopology();
-    // Keys live on whichever node is master now.
+    // Key nằm trên node nào đang là master lúc này (có thể khác node ban đầu sau failover),
+    // nên xóa qua client đi theo Sentinel.
     if (keys.length > 0) {
       const cleaner = connectViaSentinel();
       try {
@@ -111,10 +117,10 @@ describe("chaos", () => {
   }, 120_000);
 
   it("chaos_client_writes_succeed_within_30s_after_master_is_stopped", async () => {
-    // commandTimeout keeps one attempt from hanging in ioredis' offline queue past the budget.
+    // commandTimeout giữ cho mỗi lần thử không bị treo trong offline queue của ioredis quá ngân sách 30 giây.
     const client = connectViaSentinel({ commandTimeout: 2_000 });
     clients.push(client);
-    // Connection errors during the failover are expected: count them instead of letting ioredis log each one.
+    // Lỗi connection trong lúc failover là chuyện bình thường: đếm chúng thay vì để ioredis log từng lỗi.
     let connectionErrors = 0;
     client.on("error", () => (connectionErrors += 1));
     const key = uniqueName("lab04-sentinel-chaos");
@@ -135,11 +141,11 @@ describe("chaos", () => {
     );
     const elapsedMs = Date.now() - stoppedAt;
     console.log(
-      `failover measured: first successful write ${elapsedMs} ms after the master stopped (${connectionErrors} connection errors seen by the client)`,
+      `Đo failover: lần ghi thành công đầu tiên sau ${elapsedMs} ms kể từ khi dừng master (client thấy ${connectionErrors} lỗi connection)`,
     );
     expect(elapsedMs).toBeLessThan(30_000);
 
-    // The write went to a different node than the one that was stopped.
+    // Lần ghi mới phải nằm trên một node khác với node đã bị dừng, vì node đó đã được thay bằng replica được promote.
     const newMaster = await eventually(
       async () => {
         const m = await currentMaster();
@@ -162,9 +168,11 @@ describe("chaos", () => {
       { timeoutMs: 30_000, intervalMs: 200 },
     );
 
-    // Bring the old master back. redis-master starts as a master (no --replicaof) and Sentinel
-    // demotes it; a replica container starts with --replicaof redis-master and Sentinel repoints it.
-    // Either way it must end up as a replica of the NEW master.
+    // Bật master cũ lại.
+    // Container redis-master khởi động như một master (không có --replicaof) và Sentinel sẽ hạ nó xuống làm replica.
+    // Container replica khởi động với --replicaof redis-master và Sentinel trỏ nó sang master mới.
+    // Dù trường hợp nào, cuối cùng node đó phải là replica của master MỚI, nên test chờ đúng điều kiện này
+    // thay vì tin vào trạng thái "slave" nhất thời (có thể vẫn đang trỏ về master cũ).
     await startService(oldMaster.host);
     stopped.length = 0;
     const rejoined = await eventually(
@@ -186,7 +194,7 @@ describe("chaos", () => {
       },
       { timeoutMs: 60_000, intervalMs: 500 },
     );
-    // ROLE of a replica: ["slave", masterHost, masterPort, state, offset]
+    // ROLE của replica trả về: ["slave", masterHost, masterPort, state, offset]
     expect(rejoined[0]).toBe("slave");
     expect(String(rejoined[1])).toBe(newMaster.host);
     expect(Number(rejoined[2])).toBe(newMaster.port);

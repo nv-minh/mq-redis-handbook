@@ -10,10 +10,10 @@ import (
 	"time"
 )
 
-// composeProject is the compose project of this handbook. Chaos never touches a container outside it.
+// composeProject là compose project của handbook. Chaos không bao giờ đụng tới container nằm ngoài project này.
 const composeProject = "mq-handbook"
 
-// ChaosServices are the only services chaos may stop: the three Redis nodes of the sentinel profile.
+// ChaosServices là các service duy nhất chaos được phép dừng: ba node Redis của profile sentinel.
 var ChaosServices = []string{"redis-master", "redis-replica-1", "redis-replica-2"}
 
 func composeFile() string {
@@ -23,7 +23,7 @@ func composeFile() string {
 
 func compose(ctx context.Context, action, service string, extra ...string) error {
 	if !slices.Contains(ChaosServices, service) {
-		return fmt.Errorf("refusing to %s %q: not one of %v", action, service, ChaosServices)
+		return fmt.Errorf("từ chối %s %q: chỉ được phép với %v", action, service, ChaosServices)
 	}
 	ctx, cancel := context.WithTimeout(ctx, 120*time.Second)
 	defer cancel()
@@ -35,12 +35,12 @@ func compose(ctx context.Context, action, service string, extra ...string) error
 	return nil
 }
 
-// StopService stops one sentinel-profile Redis node (SIGTERM, one second grace) through docker compose.
+// StopService dừng một node Redis của profile sentinel qua docker compose (SIGTERM, chờ tối đa một giây).
 func StopService(ctx context.Context, service string) error {
 	return compose(ctx, "stop", service, "-t", "1")
 }
 
-// StartService starts a node that was stopped. It is safe to call for a node that is already running.
+// StartService bật lại node đã dừng. Gọi cho node đang chạy cũng an toàn.
 func StartService(ctx context.Context, service string) error {
 	return compose(ctx, "start", service)
 }

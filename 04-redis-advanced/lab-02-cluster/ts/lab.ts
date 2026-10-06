@@ -5,24 +5,23 @@ export interface Address {
   port: number;
 }
 
-/** The six cluster nodes as the host reaches them (ports are published 1:1). */
+/** Sáu node cluster như máy host nhìn thấy (port được publish 1:1 nên trùng với port trong container). */
 export const CLUSTER_PORTS = [7001, 7002, 7003, 7004, 7005, 7006];
 
 /**
- * Nodes announce their Docker DNS name (redis-cluster-1:7001) in CLUSTER SLOTS and in MOVED
- * redirections. The host cannot resolve it, so natMap rewrites every announced node to the
- * published port on localhost.
+ * Các node tự khai tên Docker DNS (redis-cluster-1:7001) trong CLUSTER SLOTS và trong redirect MOVED.
+ * Máy host không phân giải được tên này, nên natMap đổi mọi node đã khai sang port đã publish trên localhost.
  */
 export const NAT_MAP: Record<string, Address> = Object.fromEntries(
   CLUSTER_PORTS.map((port, i) => [`redis-cluster-${i + 1}:${port}`, { host: "127.0.0.1", port }]),
 );
 
-/** Map an announced address (redis-cluster-2:7002) to the address the host can dial. */
+/** Đổi địa chỉ node tự khai (redis-cluster-2:7002) sang địa chỉ mà máy host dial được. */
 export function hostAddress(announced: Address): Address {
   return NAT_MAP[`${announced.host}:${announced.port}`] ?? announced;
 }
 
-/** A cluster client that follows MOVED and refreshes its slot map, with natMap for Docker. */
+/** Cluster client tự theo MOVED và làm mới slot map, kèm natMap để chạy được với cluster trong Docker. */
 export function connectCluster(): Cluster {
   return new Cluster(
     CLUSTER_PORTS.slice(0, 3).map((port) => ({ host: "127.0.0.1", port })),
@@ -32,7 +31,7 @@ export function connectCluster(): Cluster {
 
 const SLOTS = 16384;
 
-// CRC16/XMODEM (poly 0x1021, init 0, no reflection, xorout 0), the variant Redis Cluster uses.
+// CRC16/XMODEM (poly 0x1021, init 0, không reflect, xorout 0), biến thể mà Redis Cluster dùng.
 const CRC_TABLE: number[] = Array.from({ length: 256 }, (_, byte) => {
   let crc = byte << 8;
   for (let bit = 0; bit < 8; bit++)
@@ -47,30 +46,31 @@ function crc16(bytes: Uint8Array): number {
 }
 
 /**
- * The part of the key that is hashed. If the key has a `{`, a `}` after it, and at least one
- * byte between the FIRST `{` and the first `}` after it, only that part is hashed.
- * Otherwise (no `{`, no `}` after it, or `{}`) the whole key is hashed.
- * Works on bytes, like Redis: `{` and `}` are single bytes in UTF-8, so searching the byte
- * array and searching the string find the same tag.
+ * Phần của key được đem đi băm.
+ * Nếu key có `{`, có `}` đứng sau nó, và có ít nhất một byte giữa `{` ĐẦU TIÊN và `}` đầu tiên sau nó
+ * thì chỉ phần đó được băm.
+ * Ngược lại (không có `{`, không có `}` phía sau, hoặc tag rỗng `{}`) thì băm cả key.
+ * Làm việc trên byte như Redis: `{` và `}` là một byte trong UTF-8,
+ * nên tìm trên mảng byte hay trên chuỗi đều ra cùng một tag.
  */
 function hashPart(key: Uint8Array): Uint8Array {
   const open = key.indexOf(0x7b); // {
   if (open === -1) return key;
-  const close = key.indexOf(0x7d, open + 1); // } after the first {
+  const close = key.indexOf(0x7d, open + 1); // } đứng sau { đầu tiên
   if (close === -1 || close === open + 1) return key;
   return key.subarray(open + 1, close);
 }
 
-/** Hash slot of a key: CRC16(hashed part) mod 16384, the same value as CLUSTER KEYSLOT. */
+/** Hash slot của một key: CRC16(phần được băm) mod 16384, cùng giá trị với CLUSTER KEYSLOT. */
 export function slotFor(key: string): number {
   return crc16(hashPart(Buffer.from(key, "utf8"))) % SLOTS;
 }
 
-/** The master that owns `slot`, as the cluster announces it (a Docker DNS name, not mapped). */
+/** Master sở hữu `slot`, theo lời cluster báo (tên Docker DNS, chưa đổi sang localhost). */
 export async function slotOwner(slot: number): Promise<Address> {
-  let lastError: unknown = new Error("no cluster node configured");
+  let lastError: unknown = new Error("chưa cấu hình node cluster nào");
   for (const port of CLUSTER_PORTS) {
-    // protocol 2: CLUSTER SLOTS replies as plain nested arrays.
+    // protocol 2: CLUSTER SLOTS trả mảng lồng nhau thuần.
     const node = new Redis({
       host: "127.0.0.1",
       port,
@@ -87,7 +87,7 @@ export async function slotOwner(slot: number): Promise<Address> {
       for (const [start, end, master] of ranges) {
         if (slot >= start && slot <= end) return { host: master[0], port: Number(master[1]) };
       }
-      throw new Error(`slot ${slot} is not covered by any master`);
+      throw new Error(`slot ${slot} chưa có master nào sở hữu`);
     } catch (error) {
       lastError = error;
     } finally {

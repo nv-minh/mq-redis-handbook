@@ -1,14 +1,15 @@
 import type { Redis } from "ioredis";
 
 /**
- * Find keys whose memory footprint is at least `thresholdBytes`, biggest first.
+ * Tìm các key có kích thước bộ nhớ từ `thresholdBytes` trở lên, key lớn nhất đứng đầu.
  *
- * It walks the keyspace with SCAN (cursor based, never blocks Redis the way KEYS does) and asks
- * MEMORY USAGE for the keys of each page in one pipeline. `match` is a glob that SCAN applies
- * on the server, `*` scans every key. Nothing is deleted and no configuration is changed.
+ * Hàm duyệt keyspace bằng SCAN (theo cursor, không chặn Redis như KEYS) và hỏi MEMORY USAGE
+ * cho các key của mỗi trang trong một pipeline.
+ * `match` là glob mà SCAN áp dụng ngay trên server, `*` là quét mọi key.
+ * Hàm không xóa gì và không đổi cấu hình server nào.
  *
- * MEMORY USAGE counts the key, its value and allocator overhead, so a key is "big" by bytes
- * here, not by element count (which is what `redis-cli --bigkeys` reports).
+ * MEMORY USAGE tính cả key, value và overhead của allocator, nên "big" ở đây là theo byte,
+ * không phải theo số phần tử (cái mà `redis-cli --bigkeys` báo).
  */
 export async function findBigKeys(
   rdb: Redis,
@@ -26,12 +27,12 @@ export async function findBigKeys(
     const replies = (await pipeline.exec()) ?? [];
     replies.forEach(([error, bytes], i) => {
       if (error) throw error;
-      // null: the key expired or was deleted between SCAN and MEMORY USAGE.
+      // null: key đã hết hạn hoặc bị xóa giữa lúc SCAN và MEMORY USAGE, bỏ qua thay vì báo lỗi.
       if (typeof bytes === "number" && bytes >= thresholdBytes)
         found.push({ key: keys[i]!, bytes });
     });
   } while (cursor !== "0");
-  // SCAN may return a key more than once.
+  // SCAN có thể trả cùng một key nhiều lần nên loại trùng.
   const unique = new Map(found.map((f) => [f.key, f]));
   return [...unique.values()].sort((a, b) => b.bytes - a.bytes).map((f) => f.key);
 }

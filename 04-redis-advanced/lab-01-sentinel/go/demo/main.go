@@ -1,5 +1,5 @@
-// Command demo writes through Sentinel, stops the master, measures how long writes fail and
-// restores the node. Needs `make up PROFILE="sentinel cluster"`.
+// Command demo ghi dữ liệu qua Sentinel, dừng master, đo xem ghi lỗi trong bao lâu rồi khôi phục node.
+// Cần `make up PROFILE="sentinel cluster"`. Node bị dừng sẽ được bật lại ở cuối.
 package main
 
 import (
@@ -35,7 +35,7 @@ func waitHealthy(ctx context.Context) error {
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
-	return fmt.Errorf("topology not healthy after 90s")
+	return fmt.Errorf("topology chưa khỏe lại sau 90s")
 }
 
 func run() error {
@@ -44,22 +44,23 @@ func run() error {
 	defer func() { _ = client.Close() }()
 	key := testkit.UniqueName("demo:sentinel")
 
-	if err := show(ctx, "start"); err != nil {
+	fmt.Println("Demo Sentinel failover: client đi theo master mới sau khi master cũ bị dừng.")
+	if err := show(ctx, "Bắt đầu (topology khỏe)"); err != nil {
 		return err
 	}
-	fmt.Println("SET through Sentinel:", client.Set(ctx, key, "before", 0).Err())
+	fmt.Println("SET qua Sentinel:", client.Set(ctx, key, "before", 0).Err())
 
 	master, err := lab.CurrentMaster(ctx)
 	if err != nil {
 		return err
 	}
 	service := lab.ServiceOf(master)
-	fmt.Printf("stopping %s (the current master)\n", service)
+	fmt.Printf("Dừng %s (master hiện tại, tìm bằng SENTINEL get-master-addr-by-name)\n", service)
 	if err := lab.StopService(ctx, service); err != nil {
 		return err
 	}
 	defer func() {
-		fmt.Printf("restarting %s\n", service)
+		fmt.Printf("Bật lại %s (nó sẽ quay về làm replica của master mới)\n", service)
 		if err := lab.StartService(ctx, service); err != nil {
 			log.Print(err)
 			return
@@ -67,7 +68,7 @@ func run() error {
 		if err := waitHealthy(ctx); err != nil {
 			log.Print(err)
 		}
-		_ = show(ctx, "end")
+		_ = show(ctx, "Kết thúc (topology khỏe lại: 1 master, 2 replica, 3 sentinel)")
 		client.Del(ctx, key)
 	}()
 
@@ -83,13 +84,13 @@ func run() error {
 		failed++
 		time.Sleep(100 * time.Millisecond)
 	}
-	fmt.Printf("first successful write %d ms after the stop (%d failed attempts before it)\n", time.Since(stoppedAt).Milliseconds(), failed)
+	fmt.Printf("Lần ghi thành công đầu tiên sau %d ms kể từ khi dừng master (%d lần ghi lỗi trước đó)\n", time.Since(stoppedAt).Milliseconds(), failed)
 	newMaster, err := lab.CurrentMaster(ctx)
 	if err != nil {
 		return err
 	}
-	fmt.Println("new master according to Sentinel:", newMaster)
+	fmt.Println("Master mới theo Sentinel:", newMaster)
 	got, _ := client.Get(ctx, key).Result()
-	fmt.Println("GET after failover:", got)
+	fmt.Println("GET sau failover:", got, "(dữ liệu ghi sau failover nằm trên master mới)")
 	return nil
 }

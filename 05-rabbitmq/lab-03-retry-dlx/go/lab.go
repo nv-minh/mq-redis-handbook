@@ -127,14 +127,16 @@ func Attempts(headers amqp.Table, workQueue string) int {
 //
 //   - handler thành công: ack.
 //   - handler lỗi và attempts < MaxRetries: Reject(requeue=false). Broker dead-letter message sang exchange retry,
-//     message nằm trong queue retry đủ RetryDelay rồi tự quay lại work. Phải dùng reject chứ không dùng nack
-//     khi cần x-death tăng, và từ 4.3 chỉ reject mới tính vào delivery limit.
+//     message nằm trong queue retry đủ RetryDelay rồi tự quay lại work.
+//     Nack(requeue=false) dead-letter và tăng x-death y hệt (test TestNackWithoutRequeueDeadLettersAndRaisesXDeathCount).
+//     Lab chọn Reject vì nó không có cờ multiple.
 //   - handler lỗi và attempts >= MaxRetries: publish một bản sao sang DLQ, giữ nguyên header (kể cả x-death)
 //     cộng x-failure-reason (lỗi cuối cùng) và x-attempts (tổng số lần đã xử lý), chờ broker confirm rồi mới ack bản gốc.
-//     Nếu publish sang DLQ không được confirm thì Reject(requeue=true): message không bao giờ bị mất, tệ nhất là
-//     xuất hiện hai bản ở DLQ nếu worker chết giữa lúc confirm và ack (at-least-once).
+//     Nếu publish sang DLQ không được confirm thì Reject(requeue=true): bước cuối này không làm mất message,
+//     tệ nhất là xuất hiện hai bản ở DLQ nếu worker chết giữa lúc confirm và ack (at-least-once).
+//     Các bước work sang retry và retry sang work do broker dead-letter, mặc định at-most-once, nên bảo đảm "không mất" chỉ áp dụng cho chặng cuối này.
 //
-// Tổng số lần handler được gọi cho một message luôn bằng MaxRetries + 1.
+// Khi không có crash và publish sang DLQ không thất bại, số lần handler được gọi cho một message bằng MaxRetries + 1.
 // Worker bật confirm mode trên ch vì nó publish sang DLQ trên chính channel này.
 func StartWorker(ch *amqp.Channel, q Queues, handler func(body []byte) error, consumerTag string) (<-chan struct{}, error) {
 	if err := ch.Confirm(false); err != nil {

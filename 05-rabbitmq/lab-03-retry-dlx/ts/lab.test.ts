@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
-import type { ChannelModel, ConfirmChannel, GetMessage } from "amqplib";
+import type { ChannelModel, ConfirmChannel, ConsumeMessage, GetMessage } from "amqplib";
 import { eventually, uniqueName } from "@handbook/testkit";
 import {
+  attemptsOf,
   openConnection,
   publishWork,
   setupRetryTopology,
@@ -173,5 +174,52 @@ describe("lab-03 retry với DLX và TTL", () => {
       "lỗi giả lập: downstream không phản hồi",
     );
     expect(dead.properties.headers?.["x-attempts"]).toBe(1);
+  });
+  it("handler_throwing_undefined_still_goes_through_the_retry_path", async () => {
+    const s = await setup({ maxRetries: 1, retryDelayMs: 100 });
+    const calls: number[] = [];
+    // Handler ném `undefined` (không phải Error): worker vẫn phải coi đây là thất bại, không được ack như thành công.
+    await startWorker(
+      s.channel,
+      s.queues,
+      async () => {
+        calls.push(performance.now());
+        throw undefined;
+      },
+      { consumerTag: uniqueName("worker") },
+    );
+
+    await publishWork(s.channel, s.queues, "poison");
+    await waitForDlq(s, 1);
+
+    expect(calls).toHaveLength(2);
+    const dead = (await s.channel.get(s.queues.dlq, { noAck: true })) as GetMessage;
+    expect(dead.properties.headers?.["x-failure-reason"]).toBe("undefined");
+    expect(dead.properties.headers?.["x-attempts"]).toBe(2);
+  });
+
+  it("nack_without_requeue_dead_letters_and_raises_x_death_count", async () => {
+    const s = await setup({ maxRetries: 5, retryDelayMs: 100 });
+    // Không dùng worker của lab: tự consume để nack lần đầu bằng basic.nack (requeue=false) rồi quan sát lần giao lại.
+    const deliveries: ConsumeMessage[] = [];
+    const secondDelivery = new Promise<ConsumeMessage>((resolve) => {
+      void s.channel.consume(s.queues.work, (msg) => {
+        if (msg === null) return;
+        if (deliveries.length === 0) {
+          deliveries.push(msg);
+          s.channel.nack(msg, false, false);
+        } else {
+          s.channel.ack(msg);
+          resolve(msg);
+        }
+      });
+    });
+
+    await publishWork(s.channel, s.queues, "poison");
+    const second = await secondDelivery;
+
+    // nack(requeue=false) dead-letter giống hệt reject(requeue=false): message đi qua queue retry và x-death của queue work tăng.
+    expect(attemptsOf(second.properties.headers, s.queues.work)).toBe(1);
+    expect(second.properties.headers?.["x-first-death-reason"]).toBe("rejected");
   });
 });

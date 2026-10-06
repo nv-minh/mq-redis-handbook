@@ -308,3 +308,45 @@ func TestMaxRetriesZeroSendsFirstFailureStraightToDlq(t *testing.T) {
 		t.Errorf("x-attempts = %#v, mong đợi int64(1)", dead.Headers["x-attempts"])
 	}
 }
+
+func TestNackWithoutRequeueDeadLettersAndRaisesXDeathCount(t *testing.T) {
+	s := newEnv(t).setup(Options{MaxRetries: 5, RetryDelay: 100 * time.Millisecond})
+	// Không dùng worker của lab: tự consume để nack lần đầu bằng basic.nack (requeue=false) rồi quan sát lần giao lại.
+	deliveries, err := s.ch.Consume(s.queues.Work, testkit.UniqueName("scripted"), false, false, false, false, nil)
+	if err != nil {
+		t.Fatalf("Consume: %v", err)
+	}
+	second := make(chan amqp.Delivery, 1)
+	done := make(chan struct{})
+	s.e.dones = append(s.e.dones, done)
+	go func() {
+		defer close(done)
+		first := true
+		for d := range deliveries {
+			if first {
+				first = false
+				_ = d.Nack(false, false)
+				continue
+			}
+			_ = d.Ack(false)
+			select {
+			case second <- d:
+			default:
+			}
+		}
+	}()
+
+	s.publish("poison")
+	select {
+	case d := <-second:
+		// nack(requeue=false) dead-letter giống hệt reject(requeue=false): message đi qua queue retry và x-death của queue work tăng.
+		if got := Attempts(d.Headers, s.queues.Work); got != 1 {
+			t.Errorf("Attempts sau nack(requeue=false) = %d, mong đợi 1", got)
+		}
+		if d.Headers["x-first-death-reason"] != "rejected" {
+			t.Errorf("x-first-death-reason = %v, mong đợi rejected", d.Headers["x-first-death-reason"])
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("message không quay lại work queue sau khi nack(requeue=false)")
+	}
+}

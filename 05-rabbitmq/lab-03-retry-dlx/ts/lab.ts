@@ -132,15 +132,17 @@ export interface WorkerOptions {
  * Chạy một worker trên queue work, mỗi lần xử lý một message (prefetch 1).
  *
  * - Handler thành công: ack.
- * - Handler lỗi và `attempts < maxRetries`: `reject(requeue=false)`. Broker dead-letter message sang exchange retry,
- *   message nằm trong queue retry đủ `retryDelayMs` rồi tự quay lại work. Phải dùng reject chứ không dùng nack
- *   khi cần x-death tăng, và từ 4.3 chỉ reject mới tính vào delivery limit.
+ * - Handler lỗi (kể cả khi nó ném `undefined`) và `attempts < maxRetries`: `reject(requeue=false)`. Broker dead-letter message
+ *   sang exchange retry, message nằm trong queue retry đủ `retryDelayMs` rồi tự quay lại work.
+ *   `nack(requeue=false)` dead-letter và tăng `x-death` y hệt (test `nack_without_requeue_dead_letters_and_raises_x_death_count`).
+ *   Lab chọn reject vì nó không có cờ `multiple`.
  * - Handler lỗi và `attempts >= maxRetries`: publish một bản sao sang DLQ, giữ nguyên header (kể cả `x-death`)
  *   cộng `x-failure-reason` (lỗi cuối cùng) và `x-attempts` (tổng số lần đã xử lý), chờ broker confirm rồi mới ack bản gốc.
- *   Nếu publish sang DLQ không được confirm thì `reject(requeue=true)`: message không bao giờ bị mất, tệ nhất là
- *   xuất hiện hai bản ở DLQ nếu worker chết giữa lúc confirm và ack (at-least-once).
+ *   Nếu publish sang DLQ không được confirm thì `reject(requeue=true)`: bước cuối này không làm mất message,
+ *   tệ nhất là xuất hiện hai bản ở DLQ nếu worker chết giữa lúc confirm và ack (at-least-once).
+ *   Các bước work sang retry và retry sang work do broker dead-letter, mặc định at-most-once, nên bảo đảm "không mất" chỉ áp dụng cho chặng cuối này.
  *
- * Tổng số lần handler được gọi cho một message luôn bằng `maxRetries + 1`.
+ * Khi không có crash và publish sang DLQ không thất bại, số lần handler được gọi cho một message bằng `maxRetries + 1`.
  * `channel` phải là confirm channel vì worker publish sang DLQ trên chính channel này.
  */
 export async function startWorker(
@@ -170,13 +172,16 @@ async function handle(
   handler: (msg: Buffer) => Promise<void>,
   msg: ConsumeMessage,
 ): Promise<void> {
+  // Cờ riêng thay vì kiểm tra giá trị lỗi: handler có thể ném `undefined` và message vẫn phải bị coi là thất bại.
+  let failed = false;
   let failure: unknown;
   try {
     await handler(msg.content);
   } catch (error) {
+    failed = true;
     failure = error;
   }
-  if (failure === undefined) {
+  if (!failed) {
     channel.ack(msg);
     return;
   }

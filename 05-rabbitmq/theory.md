@@ -229,15 +229,17 @@ stateDiagram-v2
     InDlq --> [*]
 ```
 
-Các quyết định thiết kế của lab 03 (có test cho từng điểm):
+Các quyết định thiết kế của lab 03 (mỗi điểm đều có test, trừ lựa chọn `reject` thay `nack` chỉ là sở thích về cờ `multiple`):
 
-- `maxRetries` là số lần retry sau lần xử lý đầu tiên, nên handler chạy `maxRetries + 1` lần.
+- `maxRetries` là số lần retry sau lần xử lý đầu tiên, nên khi không có crash và publish sang DLQ không thất bại thì handler chạy `maxRetries + 1` lần.
   `maxRetries = 0` nghĩa là lỗi đầu tiên đi thẳng vào DLQ.
-- Worker dùng `reject(requeue=false)` chứ không dùng `nack`, vì cần `x-death` tăng và vì từ 4.3 chỉ `reject` tính vào delivery limit.
+- Worker dùng `reject(requeue=false)`, còn `nack(requeue=false)` dead-letter và tăng `x-death` y hệt (test `nack_without_requeue_dead_letters_and_raises_x_death_count`).
+  Sự khác biệt `nack` và `reject` của 4.3 chỉ nằm ở `requeue=true`, như đã đo ở lab 01.
 - Số lần đã thất bại là tổng `count` của entry `x-death` có `queue` là work queue và `reason` là `rejected`.
 - Khi hết lượt, worker tự publish một bản sao sang DLQ rồi ack bản gốc sau khi nhận confirm, thay vì để broker dead-letter.
-  Nhờ vậy message không mất (publish không được confirm thì `reject(requeue=true)`), và bản sao giữ nguyên `x-death` cộng `x-failure-reason` và `x-attempts`.
+  Nhờ vậy chặng cuối không làm mất message (publish không được confirm thì `reject(requeue=true)`), và bản sao giữ nguyên `x-death` cộng `x-failure-reason` và `x-attempts`.
   Đổi lại, nếu worker chết giữa lúc confirm và ack thì DLQ có thể có hai bản (at-least-once).
+  Các chặng work sang retry và retry sang work do broker dead-letter, mặc định at-most-once, nên bảo đảm "không mất" chỉ áp dụng cho chặng cuối.
 - Test `retry_respects_retry_delay` chỉ khẳng định cận dưới của delay, vì tải máy chỉ làm thời gian dài ra.
 
 Hai lựa chọn khác mà lab không làm:

@@ -105,11 +105,11 @@ make lab-go LAB=05-rabbitmq/lab-02-topic-routing
 
 Test (cùng tên ở TS và Go, Go dùng CamelCase):
 
-| Test                                                 | Chứng minh                                                                                                              |
-| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `orders_star_created_matches_one_word_only`          | Binding `orders.*.created` chỉ nhận `orders.eu.created`, không nhận `orders.created` và `orders.eu.vn.created`          |
-| `orders_hash_matches_zero_or_more_words`             | Binding `orders.#` nhận `orders`, `orders.eu`, `orders.eu.vn.created` theo thứ tự và không nhận `payments.created`      |
-| `unrouted_message_is_dropped_without_mandatory_flag` | Không mandatory: có confirm, không có return, queue rỗng. Mandatory: return 312 `NO_ROUTE`. Route được: không có return |
+| Test                                                 | Chứng minh                                                                                                                                         |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `orders_star_created_matches_one_word_only`          | Binding `orders.*.created` chỉ nhận `orders.eu.created`, không nhận `orders.created` và `orders.eu.vn.created`                                     |
+| `orders_hash_matches_zero_or_more_words`             | Binding `orders.#` nhận `orders`, `orders.eu`, `orders.eu.vn.created` theo thứ tự và không nhận `payments.created`                                 |
+| `unrouted_message_is_dropped_without_mandatory_flag` | Không mandatory thì có confirm, không có return và queue rỗng; mandatory thì có return 312 `NO_ROUTE`; mandatory mà route được thì không có return |
 
 Không test nào dùng sleep cố định: test chờ bằng publisher confirm và `eventually`.
 Demo publish năm routing key tới ba pattern và in key nào vào được queue, rồi so sánh publish không mandatory với mandatory trên message không route được.

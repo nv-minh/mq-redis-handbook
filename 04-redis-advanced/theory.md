@@ -132,7 +132,8 @@ sequenceDiagram
 Thời gian failover end to end không phải một con số cố định: nó phụ thuộc `down-after-milliseconds` cộng thời gian bầu leader, promote và reconfigure.
 Giá trị mặc định trong `sentinel.conf` là `down-after-milliseconds 30000` và `failover-timeout 180000`, còn `parallel-syncs` mặc định 1.
 `failover-timeout` được dùng cho nhiều việc: thời gian chờ trước khi một Sentinel thử lại failover với cùng master (gấp hai lần giá trị này), thời gian hủy một failover chưa tạo thay đổi cấu hình, và thời gian tối đa chờ các replica được cấu hình lại.
-Compose của handbook đặt `down-after-milliseconds 2000`, `failover-timeout 10000` để failover diễn ra trong vài giây, và lab 01 đo thời gian thực tế thay vì giả định.
+Compose của handbook đặt `down-after-milliseconds 2000`, `failover-timeout 10000` để failover diễn ra nhanh trong lab, và lab 01 đo thời gian thực tế thay vì giả định.
+Con số đo được chỉ để tham khảo, vì đồng hồ của lab bắt đầu khi lệnh dừng container trả về chứ không phải từ lần `PING` thành công cuối cùng của Sentinel.
 Nguồn: https://raw.githubusercontent.com/redis/redis/8.10/sentinel.conf
 
 ### Client phát hiện master như thế nào

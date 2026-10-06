@@ -126,13 +126,17 @@ Test không dùng sleep cố định: mọi chỗ chờ dùng `eventually`.
 Thời gian failover phụ thuộc máy và cấu hình, nên đây là số đo một lần trên máy phát triển (Docker Desktop, Apple Silicon), chỉ để tham khảo.
 Với compose của handbook (`down-after-milliseconds 2000`, `failover-timeout 10000`), thời gian từ lúc dừng master tới lần ghi thành công đầu tiên đo được:
 
-| Công cụ                    | Lần ghi thành công đầu tiên sau khi dừng master |
-| -------------------------- | ----------------------------------------------- |
-| Test chaos TypeScript      | 3099 ms và 3196 ms (hai lần chạy)               |
-| Test chaos Go              | 2986 ms và 3134 ms (hai lần chạy)               |
-| Demo TypeScript và demo Go | 3654 ms và 3080 ms                              |
+| Công cụ               | Lần ghi thành công đầu tiên sau khi dừng master |
+| --------------------- | ----------------------------------------------- |
+| Test chaos TypeScript | 1904, 3085, 3099 và 3196 ms (bốn lần chạy)      |
+| Test chaos Go         | 2986 ms và 3134 ms (hai lần chạy)               |
+| Demo TypeScript       | 3043 ms và 3654 ms                              |
+| Demo Go               | 3080 ms và 3095 ms                              |
 
-Cận dưới là `down-after-milliseconds` (2000 ms), cộng thời gian bầu leader, promote và để client hỏi lại Sentinel.
+Thời gian failover gồm `down-after-milliseconds`, thời gian bầu leader, thời gian promote và thời gian để client hỏi lại Sentinel.
+Đây không phải một cận dưới cứng: số đo có thể thấp hơn `down-after-milliseconds`.
+Lý do là đồng hồ của test và demo bắt đầu khi lệnh `docker compose stop` trả về, còn các Sentinel đã bắt đầu đếm từ lần `PING` thành công cuối cùng, tức là sớm hơn.
+Vì vậy lần chạy 1904 ms ở bảng trên thấp hơn 2000 ms mà vẫn hợp lệ.
 Test chaos in dòng `Đo failover: ...` (TypeScript: `pnpm vitest run ... --reporter=verbose --silent=false`, Go: `go test -v`), và demo in cùng con số kèm số lần ghi thất bại trước đó.
 Hãy chạy lại trên máy của bạn để có số riêng.
 Với master bị dừng, ioredis báo vài lỗi kết nối (event `error`) trong lúc chờ, và test đếm chúng thay vì để ioredis log từng lỗi.

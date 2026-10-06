@@ -12,11 +12,11 @@ import (
 	"github.com/nv-minh/mq-redis-handbook/internal/testkit"
 )
 
-// gatedConsumer parks on every message until the test releases it.
+// gatedConsumer dừng lại ở mỗi message cho tới khi test cho đi tiếp.
 type gatedConsumer struct {
 	mu       sync.Mutex
 	taken    []int
-	took     chan struct{} // one signal per message taken
+	took     chan struct{} // một tín hiệu cho mỗi message được lấy
 	releases chan struct{}
 }
 
@@ -43,26 +43,26 @@ func TestPublishBlocksWhenQueueFull(t *testing.T) {
 		q := NewBoundedQueue[int](capacity)
 		t.Cleanup(q.Close)
 		for i := 0; i < capacity; i++ {
-			if err := q.Publish(context.Background(), i); err != nil { // none of these block
-				t.Fatalf("capacity %d: publish %d: %v", capacity, i, err)
+			if err := q.Publish(context.Background(), i); err != nil { // không lần publish nào bị chặn
+				t.Fatalf("capacity %d: publish %d lỗi: %v", capacity, i, err)
 			}
 		}
 		if q.Size() != capacity {
-			t.Fatalf("capacity %d: size = %d", capacity, q.Size())
+			t.Fatalf("capacity %d: size = %d, queue chưa đầy", capacity, q.Size())
 		}
 
-		// A full queue holds the publisher until its context gives up: it did not return early.
+		// Queue đầy giữ publisher lại cho tới khi context bỏ cuộc: nó không return sớm.
 		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 		err := q.Publish(ctx, capacity)
 		cancel()
 		if !errors.Is(err, context.DeadlineExceeded) {
-			t.Fatalf("capacity %d: blocked publish returned %v, want DeadlineExceeded", capacity, err)
+			t.Fatalf("capacity %d: publish bị chặn trả về %v, mong đợi DeadlineExceeded", capacity, err)
 		}
 		if q.Size() != capacity {
-			t.Fatalf("capacity %d: size after abandoned publish = %d", capacity, q.Size())
+			t.Fatalf("capacity %d: size sau publish bị bỏ dở = %d", capacity, q.Size())
 		}
 
-		// Consuming one message makes room, and a waiting publish completes.
+		// Consume một message tạo chỗ trống, và một publish đang chờ hoàn tất.
 		var published atomic.Bool
 		var publishErr atomic.Value
 		go func() {
@@ -75,15 +75,15 @@ func TestPublishBlocksWhenQueueFull(t *testing.T) {
 		q.Consume(consumer.handle)
 		testkit.Eventually(t, 2*time.Second, func() (bool, bool) { return published.Load(), published.Load() })
 		if err, _ := publishErr.Load().(error); err != nil {
-			t.Fatalf("capacity %d: unblocked publish failed: %v", capacity, err)
+			t.Fatalf("capacity %d: publish được giải phóng bị lỗi: %v", capacity, err)
 		}
-		if got := consumer.takenSnapshot(); !slices.Equal(got, []int{0}) { // FIFO: oldest first
-			t.Fatalf("capacity %d: taken = %v, want [0]", capacity, got)
+		if got := consumer.takenSnapshot(); !slices.Equal(got, []int{0}) { // FIFO: cũ nhất trước
+			t.Fatalf("capacity %d: taken = %v, mong đợi [0]", capacity, got)
 		}
-		if q.Size() != capacity { // the freed slot was refilled by the blocked publish
-			t.Fatalf("capacity %d: size = %d, want full", capacity, q.Size())
+		if q.Size() != capacity { // chỗ trống vừa giải phóng được publish đang bị chặn lấp lại
+			t.Fatalf("capacity %d: size = %d, mong đợi đầy", capacity, q.Size())
 		}
-		q.Close() // unblocks the parked handler's queue goroutine; release it too
+		q.Close() // giải phóng goroutine queue của handler đang dừng; cũng cho handler đi tiếp
 		close(consumer.releases)
 	}
 }
@@ -92,7 +92,7 @@ func TestPublishReturnsErrClosedAfterClose(t *testing.T) {
 	q := NewBoundedQueue[int](1)
 	q.Close()
 	if err := q.Publish(context.Background(), 1); !errors.Is(err, ErrClosed) {
-		t.Fatalf("err = %v, want ErrClosed", err)
+		t.Fatalf("err = %v, mong đợi ErrClosed", err)
 	}
 }
 
@@ -112,12 +112,12 @@ func TestSizeNeverExceedsCapacityWithSlowConsumer(t *testing.T) {
 		}
 	}
 
-	// A fast producer: 20 publishes back to back, each one waits for room.
+	// Producer nhanh: 20 lần publish liên tiếp, mỗi lần đều chờ chỗ trống.
 	var produced atomic.Int64
 	go func() {
 		for i := 0; i < total; i++ {
 			if err := q.Publish(context.Background(), i); err != nil {
-				t.Errorf("publish %d: %v", i, err)
+				t.Errorf("publish %d lỗi: %v", i, err)
 				return
 			}
 			observe()
@@ -125,7 +125,7 @@ func TestSizeNeverExceedsCapacityWithSlowConsumer(t *testing.T) {
 		}
 	}()
 
-	// A slow consumer: it holds each message until the test lets it go.
+	// Consumer chậm: nó giữ mỗi message cho tới khi test cho đi tiếp.
 	consumer := newGatedConsumer()
 	q.Consume(func(msg int) {
 		observe()
@@ -136,7 +136,7 @@ func TestSizeNeverExceedsCapacityWithSlowConsumer(t *testing.T) {
 		select {
 		case <-consumer.took:
 		case <-time.After(2 * time.Second):
-			t.Fatalf("consumer did not take message %d in time", done)
+			t.Fatalf("consumer không lấy message %d kịp lúc", done)
 		}
 		observe()
 		consumer.releases <- struct{}{}
@@ -151,11 +151,11 @@ func TestSizeNeverExceedsCapacityWithSlowConsumer(t *testing.T) {
 		want[i] = i
 	}
 	if got := consumer.takenSnapshot(); !slices.Equal(got, want) {
-		t.Fatalf("taken = %v, want %v", got, want)
+		t.Fatalf("taken = %v, mong đợi %v", got, want)
 	}
 	if got := maxSize.Load(); got > capacity {
-		t.Fatalf("max size = %d, exceeds capacity %d", got, capacity)
-	} else if got != capacity { // the bound was actually reached, so the check has teeth
-		t.Fatalf("max size = %d, expected the producer to fill the queue to %d", got, capacity)
+		t.Fatalf("max size = %d, vượt capacity %d", got, capacity)
+	} else if got != capacity { // giới hạn thực sự đã chạm tới, nên phép kiểm tra có ý nghĩa
+		t.Fatalf("max size = %d, mong đợi producer lấp đầy queue tới %d", got, capacity)
 	}
 }

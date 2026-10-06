@@ -1,4 +1,4 @@
-// Command demo prints what each delivery semantics does to the same six messages.
+// Command demo in ra điều mà mỗi delivery semantics làm với cùng sáu message.
 package main
 
 import (
@@ -60,15 +60,15 @@ func run(ids []string, mode lab.Mode, lossRate float64, dedup bool) {
 	}
 	suffix := ""
 	if dedup {
-		suffix = ", idempotent consumer"
+		suffix = ", consumer idempotent"
 	}
 	fmt.Printf("\n== %s, lossRate=%v%s\n", mode, lossRate, suffix)
-	fmt.Printf("published : %d\n", len(ids))
-	fmt.Printf("deliveries: %d (%s)\n", len(deliveries), strings.Join(deliveries, " "))
-	fmt.Printf("applied   : %d (%s)\n", len(applied), strings.Join(applied, " "))
+	fmt.Printf("đã publish       : %d\n", len(ids))
+	fmt.Printf("số lần deliver  : %d (%s)\n", len(deliveries), strings.Join(deliveries, " "))
+	fmt.Printf("đã xử lý         : %d (%s)\n", len(applied), strings.Join(applied, " "))
 	if len(lost) == 0 {
-		lost = []string{"none"}
+		lost = []string{"không có"}
 	}
-	fmt.Printf("never applied: %s\n", strings.Join(lost, " "))
-	fmt.Printf("duplicates applied: %d\n", dups)
+	fmt.Printf("chưa từng xử lý  : %s\n", strings.Join(lost, " "))
+	fmt.Printf("xử lý trùng      : %d\n", dups)
 }

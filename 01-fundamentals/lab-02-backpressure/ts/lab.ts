@@ -1,6 +1,6 @@
-// A bounded in-memory queue with backpressure: when the queue is full, publish() does not
-// return until a consumer has made room. The producer is slowed to the consumer's pace
-// instead of the queue growing without limit.
+// Queue có giới hạn trong bộ nhớ, với backpressure: khi queue đầy, publish() không return
+// cho tới khi consumer nhường chỗ. Producer bị làm chậm theo tốc độ của consumer
+// thay vì để queue phình ra không giới hạn.
 
 export class BoundedQueue<T> {
   private readonly items: T[] = [];
@@ -10,11 +10,11 @@ export class BoundedQueue<T> {
 
   constructor(private readonly capacity: number) {
     if (!Number.isInteger(capacity) || capacity < 1) {
-      throw new RangeError(`capacity must be an integer >= 1, got ${capacity}`);
+      throw new RangeError(`capacity phải là số nguyên >= 1, nhận ${capacity}`);
     }
   }
 
-  /** Resolves once the message is in the queue. Waits (without polling) while the queue is full. */
+  /** Resolve khi message đã nằm trong queue. Chờ (không polling) khi queue đang đầy. */
   publish(msg: T): Promise<void> {
     if (this.items.length < this.capacity) {
       this.items.push(msg);
@@ -25,15 +25,15 @@ export class BoundedQueue<T> {
   }
 
   /**
-   * Start a single sequential consumer. The message being handled has already left the queue,
-   * so it does not count towards size().
+   * Khởi động một consumer tuần tự duy nhất. Message đang được xử lý đã rời queue,
+   * nên không tính vào size().
    */
   consume(handler: (msg: T) => void | Promise<void>): void {
     this.handler = handler;
     void this.pump();
   }
 
-  /** Messages waiting in the queue, never more than the capacity. */
+  /** Số message đang chờ trong queue, không bao giờ vượt quá capacity. */
   size(): number {
     return this.items.length;
   }
@@ -44,7 +44,7 @@ export class BoundedQueue<T> {
     try {
       while (this.handler !== undefined && this.items.length > 0) {
         const msg = this.items.shift() as T;
-        const next = this.waiting.shift(); // the freed slot goes to the longest-waiting publisher
+        const next = this.waiting.shift(); // chỗ trống vừa giải phóng được trao cho publisher chờ lâu nhất
         if (next !== undefined) {
           this.items.push(next.msg);
           next.resolve();
@@ -52,7 +52,7 @@ export class BoundedQueue<T> {
         try {
           await this.handler(msg);
         } catch {
-          // Failure handling is the topic of lab-01; here a failed message is just dropped.
+          // Xử lý lỗi là chủ đề của lab-01; ở đây message lỗi chỉ bị bỏ đi.
         }
       }
     } finally {

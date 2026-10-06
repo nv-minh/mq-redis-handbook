@@ -9,13 +9,13 @@ import (
 	"github.com/nv-minh/mq-redis-handbook/internal/testkit"
 )
 
-// scripted returns a rand() that replays a fixed script, so a "random" loss is decided by the test.
+// scripted trả về rand() phát lại một kịch bản cố định, để việc mất message "ngẫu nhiên" do test quyết định.
 func scripted(t *testing.T, values ...float64) func() float64 {
 	i := 0
 	return func() float64 {
 		if i >= len(values) {
-			// Called from the queue goroutine, where Fatalf is not allowed.
-			t.Errorf("scripted rand exhausted after %d values", len(values))
+			// Được gọi từ goroutine của queue, nơi không được dùng Fatalf.
+			t.Errorf("kịch bản rand đã hết sau %d giá trị", len(values))
 			return 1
 		}
 		v := values[i]
@@ -40,9 +40,9 @@ func TestAtMostOnceLosesMessagesWhenConsumerCrashes(t *testing.T) {
 	var attempts, processed []string
 	q.Consume(func(id string) error {
 		attempts = append(attempts, id)
-		// The consumer crashes while handling m2: the handler returns an error before finishing.
+		// Consumer crash khi đang xử lý m2: handler trả về error trước khi xử lý xong.
 		if id == m2 {
-			return errors.New("consumer crashed")
+			return errors.New("consumer bị crash")
 		}
 		processed = append(processed, id)
 		return nil
@@ -53,7 +53,7 @@ func TestAtMostOnceLosesMessagesWhenConsumerCrashes(t *testing.T) {
 	}
 	q.Drain()
 
-	// m2 was handed over once and never redelivered, so its work is lost for good.
+	// m2 được giao đúng một lần và không bao giờ được giao lại, nên công việc của nó mất hẳn.
 	if !slices.Equal(attempts, []string{m1, m2, m3}) {
 		t.Fatalf("attempts = %v", attempts)
 	}
@@ -61,7 +61,7 @@ func TestAtMostOnceLosesMessagesWhenConsumerCrashes(t *testing.T) {
 		t.Fatalf("processed = %v", processed)
 	}
 	if dead := q.DeadLetters(); len(dead) != 0 {
-		t.Fatalf("dead = %v, want none", dead)
+		t.Fatalf("dead = %v, mong đợi rỗng", dead)
 	}
 }
 
@@ -74,7 +74,7 @@ func TestAtMostOnceDropsEveryDeliveryWhenLossRateIsOne(t *testing.T) {
 	}
 	q.Drain()
 	if len(seen) != 0 {
-		t.Fatalf("seen = %v, want none", seen)
+		t.Fatalf("seen = %v, mong đợi rỗng", seen)
 	}
 }
 
@@ -86,7 +86,7 @@ func TestAtLeastOnceRedeliversWhenConsumerCrashes(t *testing.T) {
 	q.Consume(func(got string) error {
 		attempts++
 		if attempts == 1 {
-			return errors.New("consumer crashed") // no ack, so the broker redelivers
+			return errors.New("consumer bị crash") // không có ack, nên broker giao lại
 		}
 		processed = append(processed, got)
 		return nil
@@ -99,7 +99,7 @@ func TestAtLeastOnceRedeliversWhenConsumerCrashes(t *testing.T) {
 }
 
 func TestAtLeastOnceDuplicatesWhenAckIsLost(t *testing.T) {
-	// LossRate = 1: every ack is lost, so every delivery is retried until MaxDeliveries.
+	// LossRate = 1: mọi ack đều mất, nên mỗi message được giao lại tới khi đạt MaxDeliveries.
 	q := NewQueue(Options{Mode: AtLeastOnce, LossRate: 1, MaxDeliveries: 3})
 	a, b := testkit.UniqueName("a"), testkit.UniqueName("b")
 	var seen []string
@@ -109,24 +109,24 @@ func TestAtLeastOnceDuplicatesWhenAckIsLost(t *testing.T) {
 	q.Drain()
 
 	if got := count(seen, a); got != 3 {
-		t.Fatalf("deliveries of a = %d, want 3", got)
+		t.Fatalf("số lần giao của a = %d, mong đợi 3", got)
 	}
 	if got := count(seen, b); got != 3 {
-		t.Fatalf("deliveries of b = %d, want 3", got)
+		t.Fatalf("số lần giao của b = %d, mong đợi 3", got)
 	}
-	// The handler did run to completion each time; only the ack went missing.
-	// After MaxDeliveries the broker gives up and parks the message as dead.
+	// Lần nào handler cũng chạy xong; chỉ có ack bị mất.
+	// Sau MaxDeliveries, broker bỏ cuộc và cho message vào dead.
 	dead := q.DeadLetters()
 	slices.Sort(dead)
 	want := []string{a, b}
 	slices.Sort(want)
 	if !slices.Equal(dead, want) {
-		t.Fatalf("dead = %v, want %v", dead, want)
+		t.Fatalf("dead = %v, mong đợi %v", dead, want)
 	}
 }
 
 func TestAtLeastOnceStopsRedeliveringOnceAnAckGetsThrough(t *testing.T) {
-	// First ack lost (0 < 0.5), second ack arrives (0.9 >= 0.5): exactly one duplicate.
+	// Ack đầu mất (0 < 0.5), ack thứ hai tới nơi (0.9 >= 0.5): đúng một duplicate.
 	q := NewQueue(Options{Mode: AtLeastOnce, LossRate: 0.5, Rand: scripted(t, 0, 0.9)})
 	id := testkit.UniqueName("m")
 	var seen []string
@@ -137,7 +137,7 @@ func TestAtLeastOnceStopsRedeliveringOnceAnAckGetsThrough(t *testing.T) {
 		t.Fatalf("seen = %v", seen)
 	}
 	if dead := q.DeadLetters(); len(dead) != 0 {
-		t.Fatalf("dead = %v, want none", dead)
+		t.Fatalf("dead = %v, mong đợi rỗng", dead)
 	}
 }
 
@@ -159,14 +159,14 @@ func TestIdempotentConsumerAppliesEachIDOnce(t *testing.T) {
 	}
 	q.Drain()
 
-	if deliveries != len(ids)*4 { // duplicates really arrived
-		t.Fatalf("deliveries = %d, want %d", deliveries, len(ids)*4)
+	if deliveries != len(ids)*4 { // duplicate thực sự đã tới
+		t.Fatalf("số lần giao = %d, mong đợi %d", deliveries, len(ids)*4)
 	}
-	slices.Sort(applied) // yet each id was applied once
+	slices.Sort(applied) // vậy mà mỗi id chỉ được áp dụng một lần
 	want := slices.Clone(ids)
 	slices.Sort(want)
 	if !slices.Equal(applied, want) {
-		t.Fatalf("applied = %v, want %v", applied, want)
+		t.Fatalf("applied = %v, mong đợi %v", applied, want)
 	}
 }
 
@@ -182,16 +182,16 @@ func TestIdempotentConsumerRetriesAnIDWhoseApplyFailed(t *testing.T) {
 		return nil
 	})
 	if err := handler("x"); err == nil {
-		t.Fatal("first call should fail")
+		t.Fatal("lần gọi đầu phải lỗi")
 	}
-	_ = handler("x") // not a duplicate: the first attempt never completed
-	_ = handler("x") // now it is a duplicate
+	_ = handler("x") // không phải duplicate: lần thử đầu chưa bao giờ hoàn tất
+	_ = handler("x") // giờ thì nó là duplicate
 	if !slices.Equal(applied, []string{"x"}) || calls != 2 {
 		t.Fatalf("applied = %v, calls = %d", applied, calls)
 	}
 }
 
-// Publishing from many goroutines while draining must be race-free (run with -race).
+// Publish từ nhiều goroutine trong lúc drain phải không có race (chạy với -race).
 func TestQueueIsSafeForConcurrentPublish(t *testing.T) {
 	q := NewQueue(Options{Mode: AtLeastOnce, LossRate: 0})
 	var mu sync.Mutex
@@ -207,6 +207,6 @@ func TestQueueIsSafeForConcurrentPublish(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	if got != 50 {
-		t.Fatalf("got = %d, want 50", got)
+		t.Fatalf("got = %d, mong đợi 50", got)
 	}
 }

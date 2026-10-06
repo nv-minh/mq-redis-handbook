@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { eventually } from "@handbook/testkit";
 import { BoundedQueue } from "./lab.js";
 
-/** A handler gate: the consumer parks on each message until the test releases it. */
+/** Handler có "cổng": consumer dừng lại ở mỗi message cho tới khi test cho đi tiếp. */
 function gatedConsumer<T>() {
   const taken: T[] = [];
   const releases: (() => void)[] = [];
@@ -13,14 +13,14 @@ function gatedConsumer<T>() {
   return { taken, handler, release: () => releases.shift()?.() };
 }
 
-/** Let every already-queued microtask and I/O callback run, without a timer. */
+/** Cho mọi microtask và I/O callback đã xếp hàng chạy xong, không dùng timer. */
 const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 describe("lab-02 backpressure", () => {
   it("publish_blocks_when_queue_full", async () => {
     for (const capacity of [1, 3]) {
       const queue = new BoundedQueue<number>(capacity);
-      for (let i = 0; i < capacity; i++) await queue.publish(i); // fills it, none of these block
+      for (let i = 0; i < capacity; i++) await queue.publish(i); // lấp đầy queue, không lần publish nào bị chặn
       expect(queue.size()).toBe(capacity);
 
       let published = false;
@@ -28,8 +28,8 @@ describe("lab-02 backpressure", () => {
         published = true;
       });
 
-      // The pending publish loses a race against an already-resolved marker, and stays pending
-      // after the event loop has turned: it is genuinely waiting for room.
+      // Publish đang pending thua cuộc đua với một marker đã resolve, và vẫn pending
+      // sau khi event loop quay một vòng: nó thực sự đang chờ chỗ trống.
       const marker = Promise.resolve("still-waiting" as const);
       expect(await Promise.race([blocked.then(() => "published" as const), marker])).toBe(
         "still-waiting",
@@ -38,13 +38,13 @@ describe("lab-02 backpressure", () => {
       expect(published).toBe(false);
       expect(queue.size()).toBe(capacity);
 
-      // Consuming one message makes room, and the blocked publish completes.
+      // Consume một message tạo chỗ trống, và publish đang bị chặn hoàn tất.
       const consumer = gatedConsumer<number>();
       queue.consume(consumer.handler);
       await eventually(async () => published, { timeoutMs: 2000 });
       await blocked;
-      expect(consumer.taken).toEqual([0]); // FIFO: the oldest message was taken first
-      expect(queue.size()).toBe(capacity); // the freed slot was refilled by the blocked publish
+      expect(consumer.taken).toEqual([0]); // FIFO: message cũ nhất được lấy trước
+      expect(queue.size()).toBe(capacity); // chỗ trống vừa giải phóng được publish đang bị chặn lấp lại
     }
   });
 
@@ -62,7 +62,7 @@ describe("lab-02 backpressure", () => {
       maxSize = Math.max(maxSize, queue.size());
     };
 
-    // A fast producer: 20 publishes issued back to back, each one waits for room.
+    // Producer nhanh: 20 lần publish liên tiếp, mỗi lần đều chờ chỗ trống.
     const producer = (async () => {
       for (let i = 0; i < total; i++) {
         await queue.publish(i);
@@ -70,7 +70,7 @@ describe("lab-02 backpressure", () => {
       }
     })();
 
-    // A slow consumer: it holds each message until the test lets it go.
+    // Consumer chậm: nó giữ mỗi message cho tới khi test cho đi tiếp.
     const consumer = gatedConsumer<number>();
     queue.consume((msg) => {
       observe();
@@ -89,6 +89,6 @@ describe("lab-02 backpressure", () => {
 
     expect(consumer.taken).toEqual(Array.from({ length: total }, (_, i) => i));
     expect(maxSize).toBeLessThanOrEqual(capacity);
-    expect(maxSize).toBe(capacity); // and the bound was actually reached, so the check has teeth
+    expect(maxSize).toBe(capacity); // và giới hạn thực sự đã chạm tới, nên phép kiểm tra có ý nghĩa
   });
 });

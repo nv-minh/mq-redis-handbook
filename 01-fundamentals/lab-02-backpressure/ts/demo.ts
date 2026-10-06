@@ -10,16 +10,16 @@ const start = Date.now();
 const at = () => `t=${String(Date.now() - start).padStart(4)}ms`;
 
 queue.consume(async (msg) => {
-  console.log(`${at()}  consumer  takes ${msg}  (size=${queue.size()})`);
-  await sleep(consumerDelayMs); // a slow consumer
+  console.log(`${at()}  consumer  nhận ${msg}  (size=${queue.size()})`);
+  await sleep(consumerDelayMs); // consumer chậm
 });
 
-// The producer never waits on purpose: publish() itself slows it down once the queue is full.
+// Producer cố ý không tự chờ: bản thân publish() làm nó chậm lại khi queue đầy.
 for (let i = 1; i <= total; i++) {
   await queue.publish(i);
-  console.log(`${at()}  producer  accepted ${i} (size=${queue.size()}/${capacity})`);
+  console.log(`${at()}  producer  đã nhận ${i} (size=${queue.size()}/${capacity})`);
 }
 console.log(
-  `${at()}  producer  done: it was paced by the consumer, the queue never exceeded ${capacity}`,
+  `${at()}  producer  xong: nó bị consumer điều tiết tốc độ, queue không bao giờ vượt quá ${capacity}`,
 );
-await sleep(consumerDelayMs * (capacity + 1)); // let the consumer finish the tail
+await sleep(consumerDelayMs * (capacity + 1)); // để consumer xử lý nốt phần đuôi

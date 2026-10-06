@@ -98,7 +98,7 @@ Test (cùng tên ở TS và Go, Go dùng CamelCase):
 
 Go có thêm `TestQueueIsSafeForConcurrentPublish` để chạy với `-race`.
 
-Demo in ra, cho cùng 6 message và `lossRate = 0.4`, ba khối: at-most-once có `never applied` khác `none`, at-least-once có `duplicates applied` lớn hơn 0, và at-least-once kèm idempotent consumer có `applied: 6` và `duplicates applied: 0`.
+Demo in ra, cho cùng 6 message và `lossRate = 0.4`, ba khối: at-most-once có `chưa từng xử lý` khác `không có`, at-least-once có `xử lý trùng` lớn hơn 0, và at-least-once kèm idempotent consumer có `đã xử lý` bằng 6 và `xử lý trùng` bằng 0.
 Demo TS và Go dùng PRNG khác nhau nên con số cụ thể khác nhau, nhưng ba kết luận trên luôn đúng.
 
 ## Bài tập mở rộng

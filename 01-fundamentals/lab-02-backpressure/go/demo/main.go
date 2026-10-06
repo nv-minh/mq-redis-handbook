@@ -1,4 +1,4 @@
-// Command demo shows a fast producer being paced by a slow consumer through a bounded queue.
+// Command demo cho thấy một producer nhanh bị consumer chậm điều tiết tốc độ qua một queue có giới hạn.
 package main
 
 import (
@@ -22,21 +22,21 @@ func main() {
 
 	consumed := make(chan struct{})
 	q.Consume(func(msg int) {
-		fmt.Printf("%s  consumer  takes %d  (size=%d)\n", at(), msg, q.Size())
-		time.Sleep(consumerDelay) // a slow consumer
+		fmt.Printf("%s  consumer  nhận %d  (size=%d)\n", at(), msg, q.Size())
+		time.Sleep(consumerDelay) // consumer chậm
 		if msg == total {
 			close(consumed)
 		}
 	})
 
-	// The producer never waits on purpose: Publish itself slows it down once the queue is full.
+	// Producer cố ý không tự chờ: bản thân Publish làm nó chậm lại khi queue đầy.
 	for i := 1; i <= total; i++ {
 		if err := q.Publish(context.Background(), i); err != nil {
 			fmt.Println("publish:", err)
 			return
 		}
-		fmt.Printf("%s  producer  accepted %d (size=%d/%d)\n", at(), i, q.Size(), capacity)
+		fmt.Printf("%s  producer  đã nhận %d (size=%d/%d)\n", at(), i, q.Size(), capacity)
 	}
-	fmt.Printf("%s  producer  done: it was paced by the consumer, the queue never exceeded %d\n", at(), capacity)
+	fmt.Printf("%s  producer  xong: nó bị consumer điều tiết tốc độ, queue không bao giờ vượt quá %d\n", at(), capacity)
 	<-consumed
 }

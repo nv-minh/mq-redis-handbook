@@ -1,34 +1,34 @@
-// In-memory broker that shows what "delivery semantics" mean, with no real network.
-// A message goes pending -> delivered to the handler -> (maybe) acked. Loss is injected through
-// `lossRate` and `rand`, so every failure in the lab is reproducible.
+// Broker trong bộ nhớ để cho thấy "delivery semantics" nghĩa là gì, không dùng mạng thật.
+// Một message đi qua pending -> được giao cho handler -> (có thể) được ack. Việc mất message được
+// tạo ra qua `lossRate` và `rand`, nên mọi lỗi trong lab đều tái hiện được.
 
 export type Mode = "at-most-once" | "at-least-once";
 
 export interface QueueOptions {
   mode: Mode;
   /**
-   * Probability (0..1) that something goes wrong in transit:
-   * - at-most-once: the delivery is lost, the handler never sees the message.
-   * - at-least-once: the consumer's ack is lost, so the broker redelivers (duplicates).
-   * 1 means it always happens, 0 means it never does.
+   * Xác suất (0..1) có sự cố trên đường truyền:
+   * - at-most-once: lần giao bị mất, handler không bao giờ thấy message.
+   * - at-least-once: ack của consumer bị mất, nên broker giao lại (sinh ra duplicate).
+   * 1 nghĩa là luôn xảy ra, 0 nghĩa là không bao giờ.
    */
   lossRate: number;
-  /** Source of randomness in [0, 1). Defaults to Math.random. */
+  /** Nguồn ngẫu nhiên trong [0, 1). Mặc định là Math.random. */
   rand?: () => number;
-  /** at-least-once only: deliveries before the message is parked as dead. Default 5. */
+  /** Chỉ at-least-once: số lần giao tối đa trước khi message bị cho vào dead. Mặc định 5. */
   maxDeliveries?: number;
 }
 
 export interface Queue {
   publish(id: string): void;
   /**
-   * Register the consumer. A handler that throws models a consumer crash:
-   * at-most-once has already forgotten the message, at-least-once never gets the ack and retries.
+   * Đăng ký consumer. Handler ném lỗi mô phỏng consumer bị crash:
+   * at-most-once đã quên message, at-least-once không nhận được ack nên thử giao lại.
    */
   consume(handler: (id: string) => void): void;
-  /** Resolves when every message that can be delivered has been settled (acked, lost or dead). */
+  /** Resolve khi mọi message có thể giao đã ngã ngũ (được ack, bị mất hoặc vào dead). */
   drain(): Promise<void>;
-  /** Ids that used up maxDeliveries without an ack. */
+  /** Các id đã dùng hết maxDeliveries mà vẫn chưa có ack. */
   deadLetters(): string[];
 }
 
@@ -43,12 +43,12 @@ export function createQueue(opts: QueueOptions): Queue {
 
   const deliver = (id: string, handle: (id: string) => void): void => {
     if (opts.mode === "at-most-once") {
-      // Fire and forget: the broker drops the message before or while handing it over.
+      // Gửi rồi quên: broker làm rơi message trước hoặc trong lúc giao.
       if (rand() < opts.lossRate) return;
       try {
         handle(id);
       } catch {
-        // Consumer crashed, but there is nothing to retry: the message is already gone.
+        // Consumer crash, nhưng không còn gì để thử lại: message đã mất rồi.
       }
       return;
     }
@@ -58,9 +58,9 @@ export function createQueue(opts: QueueOptions): Queue {
     let acked = false;
     try {
       handle(id);
-      acked = rand() >= opts.lossRate; // the ack travels back and may be lost
+      acked = rand() >= opts.lossRate; // ack đi ngược về broker và có thể bị mất
     } catch {
-      // Consumer crashed: no ack either.
+      // Consumer crash: cũng không có ack.
     }
     if (acked) {
       deliveries.delete(id);
@@ -68,12 +68,12 @@ export function createQueue(opts: QueueOptions): Queue {
       deliveries.delete(id);
       dead.push(id);
     } else {
-      pending.push(id); // redeliver, behind the messages already waiting
+      pending.push(id); // giao lại, xếp sau các message đang chờ
     }
   };
 
   const run = async (): Promise<void> => {
-    await Promise.resolve(); // let a burst of publish() calls land before delivering
+    await Promise.resolve(); // để một loạt lời gọi publish() kịp vào hàng đợi trước khi giao
     while (handler !== undefined && pending.length > 0) {
       deliver(pending.shift() as string, handler);
     }
@@ -101,9 +101,9 @@ export function createQueue(opts: QueueOptions): Queue {
 }
 
 /**
- * Wrap `apply` so redelivered ids are skipped. The id is recorded before apply runs and removed
- * again if apply throws, otherwise a failed attempt would be mistaken for a duplicate forever.
- * In-memory only: a real consumer must store the marker atomically with the side effect.
+ * Bọc `apply` để bỏ qua các id được giao lại. Id được ghi lại trước khi apply chạy và bị xóa
+ * nếu apply ném lỗi, nếu không một lần thử thất bại sẽ bị coi là duplicate mãi mãi.
+ * Chỉ trong bộ nhớ: consumer thật phải lưu marker nguyên tử cùng với side effect.
  */
 export function createIdempotentHandler(apply: (id: string) => void): (id: string) => void {
   const seen = new Set<string>();

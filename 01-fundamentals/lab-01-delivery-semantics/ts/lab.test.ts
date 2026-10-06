@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { uniqueName } from "@handbook/testkit";
 import { createIdempotentHandler, createQueue } from "./lab.js";
 
-/** A rand() that replays a fixed script, so a "random" loss is decided by the test. */
+/** rand() phát lại một kịch bản cố định, để việc mất message "ngẫu nhiên" do test quyết định. */
 function scripted(values: number[]): () => number {
   let i = 0;
   return () => {
     const value = values[i++];
-    if (value === undefined) throw new Error("scripted rand exhausted");
+    if (value === undefined) throw new Error("kịch bản rand đã hết giá trị");
     return value;
   };
 }
@@ -20,15 +20,15 @@ describe("lab-01 delivery semantics", () => {
     const processed: string[] = [];
     queue.consume((id) => {
       attempts.push(id);
-      // The consumer crashes while handling m2: the handler throws before finishing.
-      if (id === m2) throw new Error("consumer crashed");
+      // Consumer crash khi đang xử lý m2: handler ném lỗi trước khi xử lý xong.
+      if (id === m2) throw new Error("consumer bị crash");
       processed.push(id);
     });
 
     for (const id of [m1, m2, m3]) queue.publish(id);
     await queue.drain();
 
-    // m2 was handed over once and never redelivered, so its work is lost for good.
+    // m2 được giao đúng một lần và không bao giờ được giao lại, nên công việc của nó mất hẳn.
     expect(attempts).toEqual([m1, m2, m3]);
     expect(processed).toEqual([m1, m3]);
     expect(queue.deadLetters()).toEqual([]);
@@ -50,7 +50,7 @@ describe("lab-01 delivery semantics", () => {
     const processed: string[] = [];
     queue.consume((got) => {
       attempts++;
-      if (attempts === 1) throw new Error("consumer crashed"); // no ack, so the broker redelivers
+      if (attempts === 1) throw new Error("consumer bị crash"); // không có ack, nên broker giao lại
       processed.push(got);
     });
     queue.publish(id);
@@ -60,7 +60,7 @@ describe("lab-01 delivery semantics", () => {
   });
 
   it("at_least_once_duplicates_when_ack_is_lost", async () => {
-    // lossRate = 1: every ack is lost, so every delivery is retried until maxDeliveries.
+    // lossRate = 1: mọi ack đều mất, nên mỗi message được giao lại tới khi đạt maxDeliveries.
     const queue = createQueue({ mode: "at-least-once", lossRate: 1, maxDeliveries: 3 });
     const [a, b] = [uniqueName("a"), uniqueName("b")];
     const seen: string[] = [];
@@ -71,13 +71,13 @@ describe("lab-01 delivery semantics", () => {
 
     expect(seen.filter((id) => id === a)).toHaveLength(3);
     expect(seen.filter((id) => id === b)).toHaveLength(3);
-    // The handler did run to completion each time; only the ack went missing.
-    // After maxDeliveries the broker gives up and parks the message as dead.
+    // Lần nào handler cũng chạy xong; chỉ có ack bị mất.
+    // Sau maxDeliveries, broker bỏ cuộc và cho message vào dead.
     expect(queue.deadLetters().sort()).toEqual([a, b].sort());
   });
 
   it("at_least_once_stops_redelivering_once_an_ack_gets_through", async () => {
-    // First ack lost (0 < 0.5), second ack arrives (0.9 >= 0.5): exactly one duplicate.
+    // Ack đầu mất (0 < 0.5), ack thứ hai tới nơi (0.9 >= 0.5): đúng một duplicate.
     const queue = createQueue({
       mode: "at-least-once",
       lossRate: 0.5,
@@ -105,8 +105,8 @@ describe("lab-01 delivery semantics", () => {
     for (const id of ids) queue.publish(id);
     await queue.drain();
 
-    expect(deliveries).toBe(ids.length * 4); // duplicates really arrived
-    expect(applied.sort()).toEqual([...ids].sort()); // yet each id was applied once
+    expect(deliveries).toBe(ids.length * 4); // duplicate thực sự đã tới
+    expect(applied.sort()).toEqual([...ids].sort()); // vậy mà mỗi id chỉ được áp dụng một lần
   });
 
   it("idempotent_consumer_retries_an_id_whose_apply_failed", () => {
@@ -118,8 +118,8 @@ describe("lab-01 delivery semantics", () => {
       applied.push(id);
     });
     expect(() => handler("x")).toThrow("side effect failed");
-    handler("x"); // not treated as a duplicate: the first attempt never completed
-    handler("x"); // now it is a duplicate
+    handler("x"); // không bị coi là duplicate: lần thử đầu chưa bao giờ hoàn tất
+    handler("x"); // giờ thì nó là duplicate
     expect(applied).toEqual(["x"]);
     expect(calls).toBe(2);
   });

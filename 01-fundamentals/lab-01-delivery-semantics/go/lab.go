@@ -1,6 +1,6 @@
-// Package lab is an in-memory broker that shows what delivery semantics mean, with no network.
-// A message goes pending -> delivered to the handler -> (maybe) acked. Loss is injected through
-// Options.LossRate and Options.Rand, so every failure in the lab is reproducible.
+// Package lab là broker trong bộ nhớ để cho thấy delivery semantics nghĩa là gì, không dùng mạng.
+// Một message đi qua pending -> được giao cho handler -> (có thể) được ack. Việc mất message được
+// tạo ra qua Options.LossRate và Options.Rand, nên mọi lỗi trong lab đều tái hiện được.
 package lab
 
 import (
@@ -8,7 +8,7 @@ import (
 	"sync"
 )
 
-// Mode selects the delivery guarantee.
+// Mode chọn mức bảo đảm khi giao message.
 type Mode string
 
 const (
@@ -18,26 +18,26 @@ const (
 
 const defaultMaxDeliveries = 5
 
-// Options configures a Queue.
+// Options cấu hình một Queue.
 type Options struct {
 	Mode Mode
-	// LossRate is the probability (0..1) that something goes wrong in transit.
-	// AtMostOnce: the delivery is lost, the handler never sees the message.
-	// AtLeastOnce: the consumer's ack is lost, so the broker redelivers (duplicates).
-	// 1 means it always happens, 0 means it never does.
+	// LossRate là xác suất (0..1) có sự cố trên đường truyền.
+	// AtMostOnce: lần giao bị mất, handler không bao giờ thấy message.
+	// AtLeastOnce: ack của consumer bị mất, nên broker giao lại (sinh ra duplicate).
+	// 1 nghĩa là luôn xảy ra, 0 nghĩa là không bao giờ.
 	LossRate float64
-	// Rand is the source of randomness in [0, 1). Defaults to rand.Float64.
+	// Rand là nguồn ngẫu nhiên trong [0, 1). Mặc định là rand.Float64.
 	Rand func() float64
-	// MaxDeliveries (AtLeastOnce only) is the number of deliveries before the message is parked
-	// as dead. Defaults to 5.
+	// MaxDeliveries (chỉ AtLeastOnce) là số lần giao tối đa trước khi message bị cho vào dead.
+	// Mặc định là 5.
 	MaxDeliveries int
 }
 
-// Handler processes one message. Returning an error models a consumer crash:
-// AtMostOnce has already forgotten the message, AtLeastOnce never gets the ack and retries.
+// Handler xử lý một message. Trả về error mô phỏng consumer bị crash:
+// AtMostOnce đã quên message, AtLeastOnce không nhận được ack nên thử giao lại.
 type Handler func(id string) error
 
-// Queue is an in-memory broker. It is safe for concurrent use.
+// Queue là broker trong bộ nhớ. An toàn khi dùng đồng thời từ nhiều goroutine.
 type Queue struct {
 	opts Options
 
@@ -50,7 +50,7 @@ type Queue struct {
 	running    bool
 }
 
-// NewQueue returns an empty Queue.
+// NewQueue trả về một Queue rỗng.
 func NewQueue(opts Options) *Queue {
 	if opts.Rand == nil {
 		opts.Rand = rand.Float64
@@ -63,7 +63,7 @@ func NewQueue(opts Options) *Queue {
 	return q
 }
 
-// Publish enqueues a message. Delivery happens asynchronously once a consumer is registered.
+// Publish đưa một message vào hàng đợi. Việc giao diễn ra bất đồng bộ sau khi có consumer đăng ký.
 func (q *Queue) Publish(id string) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -71,7 +71,7 @@ func (q *Queue) Publish(id string) {
 	q.kick()
 }
 
-// Consume registers the consumer and starts delivering pending messages.
+// Consume đăng ký consumer và bắt đầu giao các message đang pending.
 func (q *Queue) Consume(h Handler) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -79,8 +79,8 @@ func (q *Queue) Consume(h Handler) {
 	q.kick()
 }
 
-// Drain blocks until every message that can be delivered has been settled (acked, lost or dead).
-// With no consumer registered it returns immediately.
+// Drain chặn tới khi mọi message có thể giao đã ngã ngũ (được ack, bị mất hoặc vào dead).
+// Nếu chưa có consumer nào đăng ký thì hàm return ngay.
 func (q *Queue) Drain() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -89,14 +89,14 @@ func (q *Queue) Drain() {
 	}
 }
 
-// DeadLetters returns the ids that used up MaxDeliveries without an ack.
+// DeadLetters trả về các id đã dùng hết MaxDeliveries mà vẫn chưa có ack.
 func (q *Queue) DeadLetters() []string {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	return append([]string(nil), q.dead...)
 }
 
-// kick starts the delivery goroutine if there is work and none is running. Caller holds q.mu.
+// kick khởi động goroutine giao message nếu còn việc và chưa có goroutine nào chạy. Caller phải giữ q.mu.
 func (q *Queue) kick() {
 	if !q.running && q.handler != nil && len(q.pending) > 0 {
 		q.running = true
@@ -119,20 +119,20 @@ func (q *Queue) run() {
 	q.cond.Broadcast()
 }
 
-// deliver is only ever called from the single run goroutine, so it may use rand unguarded,
-// but it must take q.mu before touching shared state.
+// deliver chỉ được gọi từ một goroutine run duy nhất, nên có thể dùng rand mà không cần khóa,
+// nhưng phải lấy q.mu trước khi đụng vào state dùng chung.
 func (q *Queue) deliver(id string, h Handler) {
 	if q.opts.Mode == AtMostOnce {
-		// Fire and forget: the broker drops the message before or while handing it over.
+		// Gửi rồi quên: broker làm rơi message trước hoặc trong lúc giao.
 		if q.opts.Rand() < q.opts.LossRate {
 			return
 		}
-		_ = h(id) // a crash changes nothing: the message is already gone
+		_ = h(id) // crash cũng không đổi được gì: message đã mất rồi
 		return
 	}
 
 	err := h(id)
-	acked := err == nil && q.opts.Rand() >= q.opts.LossRate // the ack travels back and may be lost
+	acked := err == nil && q.opts.Rand() >= q.opts.LossRate // ack đi ngược về broker và có thể bị mất
 
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -145,14 +145,13 @@ func (q *Queue) deliver(id string, h Handler) {
 		q.dead = append(q.dead, id)
 	default:
 		q.deliveries[id] = attempt
-		q.pending = append(q.pending, id) // redeliver, behind the messages already waiting
+		q.pending = append(q.pending, id) // giao lại, xếp sau các message đang chờ
 	}
 }
 
-// NewIdempotentHandler wraps apply so redelivered ids are skipped. The id is recorded before
-// apply runs and removed again if apply fails, otherwise a failed attempt would be mistaken for
-// a duplicate forever. In-memory only: a real consumer must store the marker atomically with
-// the side effect.
+// NewIdempotentHandler bọc apply để bỏ qua các id được giao lại. Id được ghi lại trước khi
+// apply chạy và bị xóa nếu apply lỗi, nếu không một lần thử thất bại sẽ bị coi là duplicate
+// mãi mãi. Chỉ trong bộ nhớ: consumer thật phải lưu marker nguyên tử cùng với side effect.
 func NewIdempotentHandler(apply Handler) Handler {
 	var mu sync.Mutex
 	seen := map[string]struct{}{}

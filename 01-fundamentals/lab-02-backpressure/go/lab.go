@@ -1,6 +1,6 @@
-// Package lab is a bounded in-memory queue with backpressure: when the queue is full, Publish
-// blocks until a consumer has made room or the context is done. The producer is slowed to the
-// consumer's pace instead of the queue growing without limit.
+// Package lab là queue có giới hạn trong bộ nhớ, với backpressure: khi queue đầy, Publish
+// chặn tới khi consumer nhường chỗ hoặc context kết thúc. Producer bị làm chậm theo tốc độ
+// của consumer thay vì để queue phình ra không giới hạn.
 package lab
 
 import (
@@ -9,26 +9,26 @@ import (
 	"sync"
 )
 
-// ErrClosed is returned by Publish after Close.
-var ErrClosed = errors.New("lab: queue closed")
+// ErrClosed được Publish trả về sau khi Close.
+var ErrClosed = errors.New("lab: queue đã đóng")
 
-// BoundedQueue holds at most capacity messages. It is safe for concurrent use.
+// BoundedQueue giữ tối đa capacity message. An toàn khi dùng đồng thời từ nhiều goroutine.
 type BoundedQueue[T any] struct {
 	items     chan T
 	done      chan struct{}
 	closeOnce sync.Once
 }
 
-// NewBoundedQueue returns a queue that holds at most capacity messages. capacity must be >= 1.
+// NewBoundedQueue trả về queue giữ tối đa capacity message. capacity phải >= 1.
 func NewBoundedQueue[T any](capacity int) *BoundedQueue[T] {
 	if capacity < 1 {
-		panic("lab: capacity must be >= 1")
+		panic("lab: capacity phải >= 1")
 	}
 	return &BoundedQueue[T]{items: make(chan T, capacity), done: make(chan struct{})}
 }
 
-// Publish blocks while the queue is full. It returns nil once the message is queued,
-// ctx.Err() if ctx is done first, or ErrClosed if the queue was closed.
+// Publish chặn khi queue đang đầy. Hàm trả về nil khi message đã vào queue,
+// ctx.Err() nếu ctx kết thúc trước, hoặc ErrClosed nếu queue đã đóng.
 func (q *BoundedQueue[T]) Publish(ctx context.Context, msg T) error {
 	select {
 	case <-q.done:
@@ -45,8 +45,8 @@ func (q *BoundedQueue[T]) Publish(ctx context.Context, msg T) error {
 	}
 }
 
-// Consume starts one sequential consumer goroutine that runs until Close. The message being
-// handled has already left the queue, so it does not count towards Size.
+// Consume khởi động một goroutine consumer tuần tự chạy tới khi Close. Message đang được
+// xử lý đã rời queue, nên không tính vào Size.
 func (q *BoundedQueue[T]) Consume(handler func(T)) {
 	go func() {
 		for {
@@ -60,9 +60,9 @@ func (q *BoundedQueue[T]) Consume(handler func(T)) {
 	}()
 }
 
-// Size is the number of messages waiting in the queue, never more than the capacity.
+// Size là số message đang chờ trong queue, không bao giờ vượt quá capacity.
 func (q *BoundedQueue[T]) Size() int { return len(q.items) }
 
-// Close stops the consumer and fails pending and future Publish calls with ErrClosed.
-// It is safe to call more than once.
+// Close dừng consumer và làm các lời gọi Publish đang chờ và sau này fail với ErrClosed.
+// Gọi nhiều lần vẫn an toàn.
 func (q *BoundedQueue[T]) Close() { q.closeOnce.Do(func() { close(q.done) }) }

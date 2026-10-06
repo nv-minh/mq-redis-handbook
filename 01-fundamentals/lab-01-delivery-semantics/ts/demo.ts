@@ -1,6 +1,6 @@
 import { createIdempotentHandler, createQueue, type Mode } from "./lab.js";
 
-/** Small seeded PRNG (mulberry32) so the demo prints the same thing every run. */
+/** PRNG nhỏ có seed (mulberry32) để demo in ra cùng kết quả ở mọi lần chạy. */
 function seeded(seed: number): () => number {
   let a = seed;
   return () => {
@@ -27,12 +27,12 @@ async function run(mode: Mode, lossRate: number, dedup: boolean): Promise<void> 
   await queue.drain();
 
   const lost = ids.filter((id) => !applied.includes(id));
-  console.log(`\n== ${mode}, lossRate=${lossRate}${dedup ? ", idempotent consumer" : ""}`);
-  console.log(`published : ${ids.length}`);
-  console.log(`deliveries: ${deliveries.length} (${deliveries.join(" ")})`);
-  console.log(`applied   : ${applied.length} (${applied.join(" ")})`);
-  console.log(`never applied: ${lost.length === 0 ? "none" : lost.join(" ")}`);
-  console.log(`duplicates applied: ${applied.length - new Set(applied).size}`);
+  console.log(`\n== ${mode}, lossRate=${lossRate}${dedup ? ", consumer idempotent" : ""}`);
+  console.log(`đã publish       : ${ids.length}`);
+  console.log(`số lần deliver  : ${deliveries.length} (${deliveries.join(" ")})`);
+  console.log(`đã xử lý         : ${applied.length} (${applied.join(" ")})`);
+  console.log(`chưa từng xử lý  : ${lost.length === 0 ? "không có" : lost.join(" ")}`);
+  console.log(`xử lý trùng      : ${applied.length - new Set(applied).size}`);
 }
 
 await run("at-most-once", 0.4, false);

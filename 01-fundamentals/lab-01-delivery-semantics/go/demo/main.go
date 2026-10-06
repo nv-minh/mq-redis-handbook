@@ -64,7 +64,7 @@ func run(ids []string, mode lab.Mode, lossRate float64, dedup bool) {
 	}
 	fmt.Printf("\n== %s, lossRate=%v%s\n", mode, lossRate, suffix)
 	fmt.Printf("đã publish       : %d\n", len(ids))
-	fmt.Printf("số lần deliver  : %d (%s)\n", len(deliveries), strings.Join(deliveries, " "))
+	fmt.Printf("số lần deliver   : %d (%s)\n", len(deliveries), strings.Join(deliveries, " "))
 	fmt.Printf("đã xử lý         : %d (%s)\n", len(applied), strings.Join(applied, " "))
 	if len(lost) == 0 {
 		lost = []string{"không có"}

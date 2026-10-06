@@ -29,7 +29,7 @@ async function run(mode: Mode, lossRate: number, dedup: boolean): Promise<void> 
   const lost = ids.filter((id) => !applied.includes(id));
   console.log(`\n== ${mode}, lossRate=${lossRate}${dedup ? ", consumer idempotent" : ""}`);
   console.log(`đã publish       : ${ids.length}`);
-  console.log(`số lần deliver  : ${deliveries.length} (${deliveries.join(" ")})`);
+  console.log(`số lần deliver   : ${deliveries.length} (${deliveries.join(" ")})`);
   console.log(`đã xử lý         : ${applied.length} (${applied.join(" ")})`);
   console.log(`chưa từng xử lý  : ${lost.length === 0 ? "không có" : lost.join(" ")}`);
   console.log(`xử lý trùng      : ${applied.length - new Set(applied).size}`);

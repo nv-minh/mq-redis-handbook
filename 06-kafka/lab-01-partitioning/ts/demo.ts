@@ -38,7 +38,7 @@ try {
   console.log("--- key null: 12 message trong cùng một lần send (một batch) ---");
   const producer = new KafkaJS.Kafka({
     kafkaJS: { brokers: brokers(), logLevel: KafkaJS.logLevel.ERROR },
-  }).producer({ kafkaJS: { acks: -1 } });
+  }).producer({ kafkaJS: { acks: -1, allowAutoTopicCreation: false } });
   await producer.connect();
   try {
     const sent = await producer.send({

@@ -75,7 +75,8 @@ CreateTopic, DeleteTopic, DeleteGroup
 Auto commit tắt ở cả hai client, nên offset chỉ được lưu khi code gọi commit tường minh:
 
 - TypeScript: `autoCommit: false` và `consumer.commitOffsets([...])`.
-- Go: chỉ dùng `FetchMessage` và `CommitMessages`. `ReadMessage` tự commit nên lab không dùng nó.
+- Go: chỉ dùng `FetchMessage` và `CommitMessages`.
+  `ReadMessage` tự commit nên lab không dùng nó.
 - Offset commit lên broker là offset của message đã xử lý cộng 1, vì Kafka lưu "offset kế tiếp cần đọc".
 
 Cách mô phỏng crash: sau điểm crash, consumer bị đóng ngay (`disconnect()` ở TypeScript, `Reader.Close()` ở Go) và không commit thêm gì.

@@ -6,8 +6,8 @@ export interface Entry {
 }
 
 /**
- * A leaderboard on one sorted set: member = player name, score = points.
- * ZADD is O(log N), ZRANGE ... REV returns the highest scores first.
+ * Bảng xếp hạng trên một sorted set: member = tên người chơi, score = điểm.
+ * ZADD có độ phức tạp O(log N), ZRANGE ... REV trả về điểm cao nhất trước.
  */
 export class Leaderboard {
   constructor(
@@ -15,22 +15,22 @@ export class Leaderboard {
     private readonly key: string,
   ) {}
 
-  /** Set the score of `name`. Adding an existing name replaces its score (no duplicate member). */
+  /** Đặt score của `name`. Thêm một tên đã có sẽ thay score của nó (không sinh member trùng). */
   async add(name: string, score: number): Promise<void> {
     await this.redis.zadd(this.key, score, name);
   }
 
-  /** Names of the `n` highest scores, best first. Empty list for an empty board or n <= 0. */
+  /** Tên của `n` điểm cao nhất, cao nhất trước. Trả về list rỗng nếu bảng rỗng hoặc n <= 0. */
   async top(n: number): Promise<string[]> {
-    // ZRANGE key 0 -1 REV means "everything", so a non-positive n must not reach Redis.
+    // ZRANGE key 0 -1 REV nghĩa là "tất cả", nên n không dương không được gửi tới Redis.
     if (n <= 0) return [];
     return this.redis.zrange(this.key, 0, String(n - 1), "REV");
   }
 
   /**
-   * Same as top(), with scores. Measured against ioredis 6.0.0 (RESP3, Redis 8.10.2): the reply of
-   * ZRANGE ... REV WITHSCORES is a FLAT array of strings ["bob", "20", "alice", "10.5"], so the
-   * pairs are rebuilt here and the scores parsed from string to number.
+   * Giống top(), kèm score. Đã đo với ioredis 6.0.0 (RESP3, Redis 8.10.2): reply của
+   * ZRANGE ... REV WITHSCORES là một mảng PHẲNG các string ["bob", "20", "alice", "10.5"], nên
+   * ở đây ta ghép lại thành cặp và parse score từ string sang number.
    */
   async topWithScores(n: number): Promise<Entry[]> {
     if (n <= 0) return [];

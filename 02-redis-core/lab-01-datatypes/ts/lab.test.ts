@@ -6,7 +6,7 @@ import { Leaderboard } from "./lab.js";
 const redis = new Redis(process.env.REDIS_URL ?? "redis://127.0.0.1:6379");
 const createdKeys: string[] = [];
 
-/** A leaderboard on a unique key, removed again in afterEach. */
+/** Bảng xếp hạng trên một key duy nhất, được xóa lại trong afterEach. */
 function newBoard(): Leaderboard {
   const key = uniqueName("lab02-leaderboard");
   createdKeys.push(key);
@@ -30,7 +30,7 @@ describe("lab-01 datatypes: leaderboard on a sorted set", () => {
     await board.add("dave", 10);
     await board.add("erin", 80);
 
-    // Highest score first, and only the three requested entries.
+    // Điểm cao nhất trước, và chỉ có ba entry được yêu cầu.
     expect(await board.top(3)).toEqual(["bob", "erin", "carol"]);
   });
 
@@ -47,7 +47,7 @@ describe("lab-01 datatypes: leaderboard on a sorted set", () => {
   });
 
   it("top_with_non_positive_n_returns_empty_list", async () => {
-    // ZRANGE key 0 -1 REV returns EVERYTHING, so n = 0 must not be turned into stop = -1.
+    // ZRANGE key 0 -1 REV trả về TẤT CẢ, nên n = 0 không được đổi thành stop = -1.
     const board = newBoard();
     await board.add("alice", 1);
     expect(await board.top(0)).toEqual([]);
@@ -72,13 +72,13 @@ describe("lab-01 datatypes: leaderboard on a sorted set", () => {
   });
 
   it("resp3_reply_shape_of_zrange_withscores_is_measured_not_assumed", async () => {
-    // ioredis 6 speaks RESP3 by default. Pin the real shapes so a client upgrade cannot change them silently.
+    // ioredis 6 mặc định nói RESP3. Cố định dạng reply thật để nâng cấp client không đổi chúng một cách âm thầm.
     const key = uniqueName("lab02-shape");
     createdKeys.push(key);
     await redis.zadd(key, 10, "a", 20.5, "b");
 
     expect(await redis.client("INFO")).toContain("resp=3");
-    // Flat array of strings: member, score, member, score (scores are NOT numbers and NOT nested).
+    // Mảng phẳng các string: member, score, member, score (score KHÔNG phải number và KHÔNG lồng nhau).
     expect(await redis.zrange(key, 0, "-1", "REV", "WITHSCORES")).toEqual(["b", "20.5", "a", "10"]);
     expect(await redis.zscore(key, "b")).toBe("20.5");
   });

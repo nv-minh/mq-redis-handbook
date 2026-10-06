@@ -26,12 +26,12 @@ func options(t *testing.T) *redis.Options {
 	t.Helper()
 	opts, err := redis.ParseURL(redisURL())
 	if err != nil {
-		t.Fatalf("parse REDIS_URL: %v", err)
+		t.Fatalf("REDIS_URL không hợp lệ: %v", err)
 	}
 	return opts
 }
 
-// newKeys returns a registrar: every key it hands out is deleted when the test ends.
+// newKeys trả về một hàm đăng ký: mọi key nó cấp ra đều bị xóa khi test kết thúc.
 func newKeys(t *testing.T, rdb *redis.Client) func(label string) string {
 	t.Helper()
 	var keys []string
@@ -56,7 +56,7 @@ func newClient(t *testing.T) *redis.Client {
 	return rdb
 }
 
-// hammer runs n DecrIfPositive calls that all start at the same moment and returns how many succeeded.
+// hammer chạy n lời gọi DecrIfPositive cùng bắt đầu tại một thời điểm và trả về số lời gọi thành công.
 func hammer(t *testing.T, rdb *redis.Client, key string, n int) int {
 	t.Helper()
 	ctx := context.Background()
@@ -70,10 +70,10 @@ func hammer(t *testing.T, rdb *redis.Client, key string, n int) int {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			<-start // release every goroutine at once
+			<-start // thả mọi goroutine cùng một lúc
 			ok, err := DecrIfPositive(ctx, rdb, key)
 			if err != nil {
-				t.Errorf("DecrIfPositive: %v", err)
+				t.Errorf("DecrIfPositive lỗi: %v", err)
 				return
 			}
 			if ok {
@@ -109,7 +109,7 @@ func TestPipelineUsesFewerRoundTripsThanSequential(t *testing.T) {
 	}
 	t.Cleanup(func() { rdb.Del(context.Background(), keys...) })
 
-	// Warm up both connection pools (HELLO and friends are writes too), then count from zero.
+	// Làm nóng cả hai connection pool (HELLO và các lệnh tương tự cũng là write), rồi đếm từ 0.
 	if err := SetSequential(ctx, rdb, prefix, 1); err != nil {
 		t.Fatal(err)
 	}
@@ -129,17 +129,17 @@ func TestPipelineUsesFewerRoundTripsThanSequential(t *testing.T) {
 	}
 	pipelinedTrips := counter.Writes()
 
-	// Each command is one write + one reply; the pipeline sends all 100 in one write.
+	// Mỗi lệnh là một write + một reply; pipeline gửi cả 100 lệnh trong một write.
 	if sequentialTrips != 100 {
-		t.Fatalf("sequential round trips = %d, want 100", sequentialTrips)
+		t.Fatalf("số round trip tuần tự = %d, mong đợi 100", sequentialTrips)
 	}
 	if pipelinedTrips != 1 {
-		t.Fatalf("pipelined round trips = %d, want 1", pipelinedTrips)
+		t.Fatalf("số round trip pipeline = %d, mong đợi 1", pipelinedTrips)
 	}
-	// Fewer round trips, same effect: all 100 keys exist.
+	// Ít round trip hơn, cùng kết quả: cả 100 key đều tồn tại.
 	n, err := rdb.Exists(ctx, keys...).Result()
 	if err != nil || n != 100 {
-		t.Fatalf("EXISTS = %d, %v; want 100", n, err)
+		t.Fatalf("EXISTS = %d, %v; mong đợi 100", n, err)
 	}
 }
 
@@ -152,12 +152,12 @@ func TestDecrIfPositiveNeverGoesBelowZeroUnder50ConcurrentCallers(t *testing.T) 
 
 	successes := hammer(t, rdb, key, callers)
 
-	// 50 callers raced for 10 units: the counter stops at 0 and never turns negative.
+	// 50 caller tranh nhau 10 đơn vị: counter dừng ở 0 và không bao giờ âm.
 	if got := value(t, rdb, key); got != "0" {
-		t.Fatalf("counter = %s, want 0", got)
+		t.Fatalf("counter = %s, mong đợi 0", got)
 	}
 	if successes > 10 {
-		t.Fatalf("successes = %d, want <= 10", successes)
+		t.Fatalf("successes = %d, mong đợi <= 10", successes)
 	}
 }
 
@@ -170,10 +170,10 @@ func TestExactlyNCallersSucceedWhenCounterIsN(t *testing.T) {
 			t.Fatal(err)
 		}
 		if got := hammer(t, rdb, key, callers); got != n {
-			t.Fatalf("counter = %d: %d callers succeeded, want exactly %d", n, got, n)
+			t.Fatalf("counter = %d: %d caller thành công, mong đợi đúng %d", n, got, n)
 		}
 		if got := value(t, rdb, key); got != "0" {
-			t.Fatalf("counter = %s after draining %d, want 0", got, n)
+			t.Fatalf("counter = %s sau khi rút cạn %d, mong đợi 0", got, n)
 		}
 	}
 }
@@ -184,10 +184,10 @@ func TestDecrIfPositiveReturnsFalseAndCreatesNothingForAMissingKey(t *testing.T)
 	key := newKeys(t, rdb)("missing")
 	ok, err := DecrIfPositive(ctx, rdb, key)
 	if err != nil || ok {
-		t.Fatalf("DecrIfPositive = %v, %v; want false, nil", ok, err)
+		t.Fatalf("DecrIfPositive = %v, %v; mong đợi false, nil", ok, err)
 	}
 	if n, _ := rdb.Exists(ctx, key).Result(); n != 0 {
-		t.Fatalf("key was created by a failed decrement")
+		t.Fatalf("key bị tạo ra bởi một lần giảm thất bại")
 	}
 }
 
@@ -200,10 +200,10 @@ func TestDecrIfPositiveReturnsFalseAtZero(t *testing.T) {
 	}
 	ok, err := DecrIfPositive(ctx, rdb, key)
 	if err != nil || ok {
-		t.Fatalf("DecrIfPositive = %v, %v; want false, nil", ok, err)
+		t.Fatalf("DecrIfPositive = %v, %v; mong đợi false, nil", ok, err)
 	}
 	if got := value(t, rdb, key); got != "0" {
-		t.Fatalf("counter = %s, want 0", got)
+		t.Fatalf("counter = %s, mong đợi 0", got)
 	}
 }
 
@@ -215,19 +215,19 @@ func TestNoscriptAfterScriptFlushIsRecoveredByTheClient(t *testing.T) {
 		t.Fatal(err)
 	}
 	if ok, err := DecrIfPositive(ctx, rdb, key); err != nil || !ok {
-		t.Fatalf("first DecrIfPositive = %v, %v; want true, nil", ok, err)
+		t.Fatalf("DecrIfPositive lần đầu = %v, %v; mong đợi true, nil", ok, err)
 	}
 
-	// The server forgets every cached script (this also happens on restart or failover).
+	// Server quên mọi script đã cache (điều này cũng xảy ra khi restart hoặc failover).
 	if err := rdb.ScriptFlush(ctx).Err(); err != nil {
 		t.Fatal(err)
 	}
 
-	// EVALSHA fails with NOSCRIPT inside redis.Script.Run, which falls back to EVAL.
+	// EVALSHA fail với NOSCRIPT bên trong redis.Script.Run, hàm này chuyển sang EVAL.
 	if ok, err := DecrIfPositive(ctx, rdb, key); err != nil || !ok {
-		t.Fatalf("DecrIfPositive after SCRIPT FLUSH = %v, %v; want true, nil", ok, err)
+		t.Fatalf("DecrIfPositive sau SCRIPT FLUSH = %v, %v; mong đợi true, nil", ok, err)
 	}
 	if got := value(t, rdb, key); got != "0" {
-		t.Fatalf("counter = %s, want 0", got)
+		t.Fatalf("counter = %s, mong đợi 0", got)
 	}
 }

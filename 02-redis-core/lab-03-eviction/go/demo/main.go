@@ -1,6 +1,6 @@
-// Command demo shows allkeys-lru evicting cold keys (and keeping the hot one) and noeviction
-// rejecting writes with OOM. It CHANGES maxmemory settings of the server and restores them.
-// Only run it against the Redis of this handbook's compose stack (make up).
+// Command demo cho thấy allkeys-lru evict các key lạnh (và giữ key nóng) còn noeviction
+// từ chối lệnh ghi với lỗi OOM. Demo THAY ĐỔI setting maxmemory của server và khôi phục lại.
+// Chỉ chạy nó với Redis của compose stack trong handbook này (make up).
 package main
 
 import (
@@ -40,7 +40,7 @@ func run() (err error) {
 	defer func() { _ = rdb.Close() }()
 
 	prefix := testkit.UniqueName("demo:eviction")
-	if err := lab.AssertOwnRedis(ctx, rdb, lab.OwnRedisMarker); err != nil { // refuse before any CONFIG SET
+	if err := lab.AssertOwnRedis(ctx, rdb, lab.OwnRedisMarker); err != nil { // từ chối trước mọi lệnh CONFIG SET
 		return err
 	}
 	original, err := lab.ReadConfig(ctx, rdb)
@@ -55,11 +55,11 @@ func run() (err error) {
 			err = derr
 		}
 		now, _ := lab.ReadConfig(ctx, rdb)
-		fmt.Printf("restored config: %+v\n", now)
+		fmt.Printf("config đã khôi phục: %+v\n", now)
 	}()
-	fmt.Printf("saved config: %+v\n", original)
+	fmt.Printf("config đã lưu: %+v\n", original)
 
-	fmt.Println("== allkeys-lru: write past the limit while touching one hot key ==")
+	fmt.Println("== allkeys-lru: ghi vượt giới hạn trong khi liên tục chạm vào một key nóng ==")
 	if err := lab.SeedKeys(ctx, rdb, prefix+":cold", coldKeys, 1024); err != nil {
 		return err
 	}
@@ -67,7 +67,7 @@ func run() (err error) {
 	if err := rdb.Set(ctx, hot, "hot", 0).Err(); err != nil {
 		return err
 	}
-	for { // wait until the cold keys look old (LRU idle time has a 1 second resolution)
+	for { // chờ tới khi các key lạnh trông đã cũ (idle time của LRU có độ phân giải 1 giây)
 		idle, err := rdb.ObjectIdleTime(ctx, prefix+":cold:0").Result()
 		if err != nil {
 			return err
@@ -82,7 +82,7 @@ func run() (err error) {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("maxmemory set to %d bytes (used_memory + %d)\n", maxmemory, headroom)
+	fmt.Printf("đã đặt maxmemory = %d byte (used_memory + %d)\n", maxmemory, headroom)
 	evicted, err := lab.FillUntilEviction(ctx, rdb, prefix+":fill", 20_000, lab.FillOptions{TouchKey: hot, MinEvicted: 900})
 	if err != nil {
 		return err
@@ -93,9 +93,9 @@ func run() (err error) {
 	}
 	surviving, _ := rdb.Exists(ctx, cold...).Result()
 	hotAlive, _ := rdb.Exists(ctx, hot).Result()
-	fmt.Printf("evicted_keys grew by %d\n", evicted)
-	fmt.Printf("hot key survived: %v\n", hotAlive == 1)
-	fmt.Printf("cold keys left: %d of %d\n", surviving, coldKeys)
+	fmt.Printf("evicted_keys tăng thêm %d\n", evicted)
+	fmt.Printf("key nóng còn sống: %v\n", hotAlive == 1)
+	fmt.Printf("key lạnh còn lại: %d trên %d\n", surviving, coldKeys)
 
 	if err := lab.WriteConfig(ctx, rdb, original); err != nil {
 		return err
@@ -104,7 +104,7 @@ func run() (err error) {
 		return err
 	}
 
-	fmt.Println("== noeviction: the same pressure rejects writes ==")
+	fmt.Println("== noeviction: cùng áp lực đó thì lệnh ghi bị từ chối ==")
 	before, _ := lab.EvictedKeys(ctx, rdb)
 	if _, err := lab.LimitMemory(ctx, rdb, "noeviction", headroom); err != nil {
 		return err
@@ -113,8 +113,8 @@ func run() (err error) {
 	if err != nil {
 		return err
 	}
-	fmt.Println("write error:", msg)
+	fmt.Println("lỗi khi ghi:", msg)
 	after, _ := lab.EvictedKeys(ctx, rdb)
-	fmt.Printf("evicted_keys grew by %d\n", after-before)
+	fmt.Printf("evicted_keys tăng thêm %d\n", after-before)
 	return nil
 }

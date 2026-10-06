@@ -25,44 +25,44 @@ func redisURL() string {
 	return "redis://127.0.0.1:6379"
 }
 
-// setup connects, saves the eviction config BEFORE the first CONFIG SET, and registers cleanups.
-// t.Cleanup runs last-in first-out: the config is restored first (so deletes are never blocked by a
-// full memory), then the test keys are dropped, then the client is closed.
+// setup kết nối, lưu config eviction TRƯỚC lần CONFIG SET đầu tiên, và đăng ký các cleanup.
+// t.Cleanup chạy theo thứ tự vào sau ra trước: config được khôi phục trước (để lệnh xóa không bao giờ
+// bị chặn vì đầy bộ nhớ), rồi xóa các key của test, rồi đóng client.
 //
-// This lab CHANGES the maxmemory settings of the server it connects to (and restores them).
-// Only run it against the Redis of this handbook's compose stack (make up).
+// Lab này THAY ĐỔI setting maxmemory của server mà nó kết nối tới (và khôi phục lại).
+// Chỉ chạy nó với Redis của compose stack trong handbook này (make up).
 func setup(t *testing.T) (*redis.Client, string) {
 	t.Helper()
 	opts, err := redis.ParseURL(redisURL())
 	if err != nil {
-		t.Fatalf("parse REDIS_URL: %v", err)
+		t.Fatalf("REDIS_URL không hợp lệ: %v", err)
 	}
 	rdb := redis.NewClient(opts)
 	t.Cleanup(func() { _ = rdb.Close() })
 
 	ctx := context.Background()
-	// Refuse before any CONFIG SET: wrong server or leftover config. No restore cleanup is
-	// registered yet, so a refusal never writes config back.
+	// Từ chối trước mọi lệnh CONFIG SET: sai server hoặc còn config cũ. Chưa đăng ký cleanup khôi phục
+	// nào, nên khi bị từ chối sẽ không bao giờ ghi config ngược lại.
 	if err := AssertOwnRedis(ctx, rdb, OwnRedisMarker); err != nil {
 		t.Fatal(err)
 	}
 	original, err := ReadConfig(ctx, rdb)
 	if err != nil {
-		t.Fatalf("read config: %v", err)
+		t.Fatalf("đọc config lỗi: %v", err)
 	}
 	prefix := testkit.UniqueName("lab02-evict")
 	t.Cleanup(func() {
 		cctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if err := DeleteByPrefix(cctx, rdb, prefix); err != nil {
-			t.Errorf("delete keys: %v", err)
+			t.Errorf("xóa key lỗi: %v", err)
 		}
 	})
 	t.Cleanup(func() {
 		cctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := WriteConfig(cctx, rdb, original); err != nil {
-			t.Errorf("RESTORING THE REDIS CONFIG FAILED, fix by hand (maxmemory=%s policy=%s): %v",
+			t.Errorf("KHÔI PHỤC CONFIG REDIS THẤT BẠI, hãy sửa bằng tay (maxmemory=%s policy=%s): %v",
 				original.Maxmemory, original.Policy, err)
 		}
 	})
@@ -84,7 +84,7 @@ func TestAllkeysLruEvictsColdKeysAndKeepsHotKey(t *testing.T) {
 	hot := prefix + ":hot"
 	coldPrefix := prefix + ":cold"
 
-	// 1. Load cold keys and the hot key while there is no limit.
+	// 1. Nạp các key lạnh và key nóng khi chưa có giới hạn.
 	if err := SeedKeys(ctx, rdb, coldPrefix, coldKeys, valueSize); err != nil {
 		t.Fatal(err)
 	}
@@ -92,14 +92,14 @@ func TestAllkeysLruEvictsColdKeysAndKeepsHotKey(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 2. LRU idle time has a resolution of one second: wait until the cold keys look old.
+	// 2. Idle time của LRU có độ phân giải một giây: chờ tới khi các key lạnh trông đã cũ.
 	testkit.Eventually(t, 10*time.Second, func() (struct{}, bool) {
 		idle, err := rdb.ObjectIdleTime(ctx, coldPrefix+":0").Result()
 		return struct{}{}, err == nil && idle >= 2*time.Second
 	})
-	rdb.Get(ctx, hot) // reading the hot key resets its idle time to 0
+	rdb.Get(ctx, hot) // đọc key nóng đặt lại idle time của nó về 0
 
-	// 3. Cap memory just above what is used now, then keep writing while touching the hot key.
+	// 3. Giới hạn bộ nhớ ngay trên mức đang dùng, rồi tiếp tục ghi trong khi chạm vào key nóng.
 	if _, err := LimitMemory(ctx, rdb, "allkeys-lru", headroom); err != nil {
 		t.Fatal(err)
 	}
@@ -108,12 +108,12 @@ func TestAllkeysLruEvictsColdKeysAndKeepsHotKey(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Never assert an exact number: eviction is approximate (sampling).
+	// Không bao giờ assert một con số chính xác: eviction chỉ là xấp xỉ (dựa trên sampling).
 	if n <= 0 {
-		t.Fatalf("evicted = %d, want > 0", n)
+		t.Fatalf("evicted = %d, mong đợi > 0", n)
 	}
 	if exists, _ := rdb.Exists(ctx, hot).Result(); exists != 1 {
-		t.Fatal("the hot key was evicted")
+		t.Fatal("key nóng đã bị evict")
 	}
 	cold := make([]string, coldKeys)
 	for i := range cold {
@@ -124,7 +124,7 @@ func TestAllkeysLruEvictsColdKeysAndKeepsHotKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	if surviving >= coldKeys {
-		t.Fatalf("all %d cold keys survived, want some evicted", surviving)
+		t.Fatalf("cả %d key lạnh đều còn sống, mong đợi một số bị evict", surviving)
 	}
 }
 
@@ -145,17 +145,17 @@ func TestNoevictionPolicyRejectsWritesWhenFull(t *testing.T) {
 	}
 
 	if !strings.HasPrefix(msg, "OOM") {
-		t.Fatalf("write error = %q, want it to start with OOM", msg)
+		t.Fatalf("lỗi khi ghi = %q, mong đợi bắt đầu bằng OOM", msg)
 	}
-	// Reads keep working, nothing was evicted, and the data written before the limit survives.
+	// Lệnh đọc vẫn chạy, không có gì bị evict, và dữ liệu ghi trước giới hạn vẫn còn.
 	if got, err := rdb.Get(ctx, prefix+":existing").Result(); err != nil || got != "still readable" {
 		t.Fatalf("GET existing = %q, %v", got, err)
 	}
 	if after := evicted(t, rdb); after != before {
-		t.Fatalf("evicted_keys changed from %d to %d under noeviction", before, after)
+		t.Fatalf("evicted_keys đổi từ %d sang %d dưới noeviction", before, after)
 	}
 	if exists, _ := rdb.Exists(ctx, prefix+":fill:0").Result(); exists != 1 {
-		t.Fatal("data written before the limit was lost")
+		t.Fatal("dữ liệu ghi trước giới hạn đã bị mất")
 	}
 }
 
@@ -164,7 +164,7 @@ func TestVolatilePolicyRejectsWritesWhenNoKeyHasATTL(t *testing.T) {
 	rdb, prefix := setup(t)
 	before := evicted(t, rdb)
 
-	// volatile-lru may only evict keys that have a TTL. None of ours does, so it behaves like noeviction.
+	// volatile-lru chỉ được evict các key có TTL. Không key nào của ta có, nên nó hành xử như noeviction.
 	if _, err := LimitMemory(ctx, rdb, "volatile-lru", headroom); err != nil {
 		t.Fatal(err)
 	}
@@ -174,10 +174,10 @@ func TestVolatilePolicyRejectsWritesWhenNoKeyHasATTL(t *testing.T) {
 	}
 
 	if !strings.HasPrefix(msg, "OOM") {
-		t.Fatalf("write error = %q, want it to start with OOM", msg)
+		t.Fatalf("lỗi khi ghi = %q, mong đợi bắt đầu bằng OOM", msg)
 	}
 	if after := evicted(t, rdb); after != before {
-		t.Fatalf("evicted_keys changed from %d to %d", before, after)
+		t.Fatalf("evicted_keys đổi từ %d sang %d", before, after)
 	}
 }
 
@@ -193,14 +193,14 @@ func TestConfigIsRestoredToTheSavedValues(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got, _ := ReadConfig(ctx, rdb); got.Policy != "allkeys-lru" {
-		t.Fatalf("policy = %q, want allkeys-lru", got.Policy)
+		t.Fatalf("policy = %q, mong đợi allkeys-lru", got.Policy)
 	}
 
 	if err := WriteConfig(ctx, rdb, original); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := ReadConfig(ctx, rdb); got != original {
-		t.Fatalf("config = %+v, want %+v", got, original)
+		t.Fatalf("config = %+v, mong đợi %+v", got, original)
 	}
 }
 
@@ -213,20 +213,20 @@ func TestGuardRefusesARedisWithoutTheHandbookMarkerAndChangesNothing(t *testing.
 	}
 	err = AssertOwnRedis(ctx, rdb, "some-other-marker.rdb")
 	if err == nil || !strings.Contains(err.Error(), "not the handbook marker") {
-		t.Fatalf("AssertOwnRedis = %v, want a refusal naming the marker", err)
+		t.Fatalf("AssertOwnRedis = %v, mong đợi lời từ chối nêu rõ marker", err)
 	}
-	if after, _ := ReadConfig(ctx, rdb); after != before { // read-only: no CONFIG SET happened
-		t.Fatalf("config changed from %+v to %+v", before, after)
+	if after, _ := ReadConfig(ctx, rdb); after != before { // chỉ đọc: không có CONFIG SET nào xảy ra
+		t.Fatalf("config đổi từ %+v sang %+v", before, after)
 	}
 }
 
 func TestGuardRefusesLeftoverConfigWithAHintToRecreateTheStack(t *testing.T) {
 	state := ServerState{DBFilename: OwnRedisMarker, Maxmemory: "4000000", Policy: "allkeys-lru"}
 	if msg := GuardProblem(state, OwnRedisMarker); !strings.Contains(msg, "make down && make up") {
-		t.Fatalf("GuardProblem = %q, want the recreate hint", msg)
+		t.Fatalf("GuardProblem = %q, mong đợi gợi ý tạo lại stack", msg)
 	}
 	state.Maxmemory, state.Policy = "0", "noeviction"
 	if msg := GuardProblem(state, OwnRedisMarker); msg != "" {
-		t.Fatalf("GuardProblem on a pristine server = %q, want empty", msg)
+		t.Fatalf("GuardProblem trên server nguyên vẹn = %q, mong đợi rỗng", msg)
 	}
 }

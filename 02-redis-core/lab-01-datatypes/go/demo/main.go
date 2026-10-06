@@ -1,4 +1,4 @@
-// Command demo walks through the five core Redis data types and the leaderboard.
+// Command demo đi qua năm kiểu dữ liệu cốt lõi của Redis và bảng xếp hạng.
 package main
 
 import (
@@ -35,28 +35,28 @@ func run() error {
 	keys := []string{prefix + ":string", prefix + ":hash", prefix + ":list", prefix + ":set", prefix + ":board", prefix + ":empty"}
 	defer func() { rdb.Del(ctx, keys...) }()
 
-	fmt.Println("== string: counter with INCR ==")
+	fmt.Println("== string: bộ đếm với INCR ==")
 	rdb.Set(ctx, keys[0], "40", 0)
 	rdb.Incr(ctx, keys[0])
 	rdb.IncrBy(ctx, keys[0], 1)
 	fmt.Println("GET ->", rdb.Get(ctx, keys[0]).Val())
 
-	fmt.Println("== hash: one object, several fields ==")
+	fmt.Println("== hash: một object, nhiều field ==")
 	rdb.HSet(ctx, keys[1], "name", "alice", "plan", "pro")
 	rdb.HIncrBy(ctx, keys[1], "logins", 3)
 	fmt.Println("HGETALL ->", rdb.HGetAll(ctx, keys[1]).Val())
 
-	fmt.Println("== list: ordered, push at the head, pop at the tail ==")
+	fmt.Println("== list: có thứ tự, push ở đầu, pop ở cuối ==")
 	rdb.LPush(ctx, keys[2], "c", "b", "a")
 	fmt.Println("LRANGE ->", rdb.LRange(ctx, keys[2], 0, -1).Val())
 	fmt.Println("RPOP ->", rdb.RPop(ctx, keys[2]).Val())
 
-	fmt.Println("== set: unique, unordered ==")
+	fmt.Println("== set: không trùng, không có thứ tự ==")
 	rdb.SAdd(ctx, keys[3], "x", "y", "x")
-	fmt.Println("SCARD ->", rdb.SCard(ctx, keys[3]).Val(), "(x was added twice)")
+	fmt.Println("SCARD ->", rdb.SCard(ctx, keys[3]).Val(), "(x đã được thêm hai lần)")
 	fmt.Println("SISMEMBER y ->", rdb.SIsMember(ctx, keys[3], "y").Val())
 
-	fmt.Println("== sorted set: leaderboard ==")
+	fmt.Println("== sorted set: bảng xếp hạng ==")
 	board := lab.NewLeaderboard(rdb, keys[4])
 	for _, p := range []struct {
 		name  string
@@ -80,11 +80,11 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("raw WITHSCORES reply (RESP3, go-redis 9) -> %v\n", raw)
+	fmt.Printf("reply WITHSCORES thô (RESP3, go-redis 9) -> %v\n", raw)
 	empty, err := lab.NewLeaderboard(rdb, keys[5]).Top(ctx, 3)
 	if err != nil {
 		return err
 	}
-	fmt.Println("Top(3) on an empty board ->", empty)
+	fmt.Println("Top(3) trên bảng rỗng ->", empty)
 	return nil
 }

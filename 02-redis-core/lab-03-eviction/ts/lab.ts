@@ -1,6 +1,6 @@
 import type { Redis } from "ioredis";
 
-/** The three settings this lab changes, as the strings CONFIG GET returns. */
+/** Ba setting mà lab này thay đổi, dưới dạng chuỗi mà CONFIG GET trả về. */
 export interface EvictionConfig {
   maxmemory: string;
   policy: string;
@@ -10,16 +10,16 @@ export interface EvictionConfig {
 const BATCH = 50;
 
 async function configValue(redis: Redis, name: string): Promise<string> {
-  // Measured with ioredis 6.0.0 (RESP3): CONFIG GET replies with a FLAT array ["name", "value"].
+  // Đã đo với ioredis 6.0.0 (RESP3): CONFIG GET trả về một mảng PHẲNG ["name", "value"].
   const reply = (await redis.config("GET", name)) as string[];
   const value = reply[1];
   if (reply[0] !== name || value === undefined) {
-    throw new Error(`unexpected CONFIG GET ${name} reply: ${JSON.stringify(reply)}`);
+    throw new Error(`reply của CONFIG GET ${name} không như mong đợi: ${JSON.stringify(reply)}`);
   }
   return value;
 }
 
-/** Read the current settings. Call this BEFORE the first CONFIG SET so you can put them back. */
+/** Đọc các setting hiện tại. Gọi hàm này TRƯỚC lần CONFIG SET đầu tiên để còn có cái mà khôi phục. */
 export async function readConfig(redis: Redis): Promise<EvictionConfig> {
   return {
     maxmemory: await configValue(redis, "maxmemory"),
@@ -28,30 +28,30 @@ export async function readConfig(redis: Redis): Promise<EvictionConfig> {
   };
 }
 
-/** Apply settings. The policy goes first, so a lower maxmemory is never enforced with the old policy. */
+/** Áp dụng setting. Policy được đặt trước, để maxmemory thấp hơn không bao giờ bị áp dụng với policy cũ. */
 export async function writeConfig(redis: Redis, config: EvictionConfig): Promise<void> {
   await redis.config("SET", "maxmemory-policy", config.policy);
   await redis.config("SET", "maxmemory-samples", config.samples);
   await redis.config("SET", "maxmemory", config.maxmemory);
 }
 
-/** Parse one numeric field of INFO. */
+/** Parse một field dạng số của INFO. */
 async function infoNumber(redis: Redis, section: string, field: string): Promise<number> {
   const info = await redis.info(section);
   const match = new RegExp(`^${field}:(\\d+)`, "m").exec(info);
-  if (!match) throw new Error(`INFO ${section} has no ${field}`);
+  if (!match) throw new Error(`INFO ${section} không có ${field}`);
   return Number(match[1]);
 }
 
 export const usedMemory = (redis: Redis) => infoNumber(redis, "memory", "used_memory");
 
-/** Total number of keys the server has evicted since it started (INFO stats evicted_keys). */
+/** Tổng số key mà server đã evict kể từ lúc khởi động (INFO stats evicted_keys). */
 export const evictedKeys = (redis: Redis) => infoNumber(redis, "stats", "evicted_keys");
 
 /**
- * Cap memory relative to what is used right now, so the lab works on any baseline:
- * maxmemory = used_memory + headroomBytes. samples=10 makes approximate LRU closer to real LRU.
- * Returns the maxmemory it set, in bytes.
+ * Giới hạn bộ nhớ theo mức đang dùng ngay lúc này, để lab chạy được trên mọi baseline:
+ * maxmemory = used_memory + headroomBytes. samples=10 làm LRU xấp xỉ gần với LRU thật hơn.
+ * Trả về maxmemory đã đặt, tính bằng byte.
  */
 export async function limitMemory(
   redis: Redis,
@@ -63,7 +63,7 @@ export async function limitMemory(
   return maxmemory;
 }
 
-/** Write `count` keys `${prefix}:0 .. ${prefix}:count-1`, each holding `valueSize` bytes. */
+/** Ghi `count` key `${prefix}:0 .. ${prefix}:count-1`, mỗi key chứa `valueSize` byte. */
 export async function seedKeys(
   redis: Redis,
   prefix: string,
@@ -82,18 +82,18 @@ export async function seedKeys(
 }
 
 export interface FillOptions {
-  /** Bytes per value. Default 1024. */
+  /** Số byte của mỗi value. Mặc định 1024. */
   valueSize?: number;
-  /** A key to GET after every batch, so it stays "recently used". */
+  /** Một key được GET sau mỗi batch, để nó luôn "vừa được dùng". */
   touchKey?: string;
-  /** Stop once at least this many keys were evicted. Default 1. */
+  /** Dừng khi đã có ít nhất chừng này key bị evict. Mặc định 1. */
   minEvicted?: number;
 }
 
 /**
- * Keep writing `${prefix}:0 ..` (at most `maxKeys` keys, in batches of 50) until the server has
- * evicted at least `minEvicted` keys. Returns how many keys were evicted during the call
- * (the delta of evicted_keys), 0 if the limit was never reached.
+ * Ghi liên tục `${prefix}:0 ..` (tối đa `maxKeys` key, theo batch 50) cho tới khi server đã
+ * evict ít nhất `minEvicted` key. Trả về số key bị evict trong lúc gọi
+ * (độ chênh của evicted_keys), 0 nếu chưa bao giờ chạm giới hạn.
  */
 export async function fillUntilEviction(
   redis: Redis,
@@ -119,8 +119,8 @@ export async function fillUntilEviction(
 }
 
 /**
- * Keep writing `${prefix}:0 ..` until the server rejects a write. Returns the error message of the
- * first rejected write, or null if all `maxKeys` writes succeeded. Keys before the rejection stay.
+ * Ghi liên tục `${prefix}:0 ..` cho tới khi server từ chối một lần ghi. Trả về message lỗi của
+ * lần ghi đầu tiên bị từ chối, hoặc null nếu cả `maxKeys` lần ghi đều thành công. Các key ghi trước lúc bị từ chối vẫn còn.
  */
 export async function fillUntilRejected(
   redis: Redis,
@@ -140,7 +140,7 @@ export async function fillUntilRejected(
   return null;
 }
 
-/** Delete every key that starts with `${prefix}:`, using SCAN (never KEYS) and UNLINK. */
+/** Xóa mọi key bắt đầu bằng `${prefix}:`, dùng SCAN (không bao giờ dùng KEYS) và UNLINK. */
 export async function deleteByPrefix(redis: Redis, prefix: string): Promise<void> {
   let cursor = "0";
   do {
@@ -150,7 +150,7 @@ export async function deleteByPrefix(redis: Redis, prefix: string): Promise<void
   } while (cursor !== "0");
 }
 
-/** Value of `dbfilename` that infra/docker-compose.yml gives the handbook's own Redis. */
+/** Giá trị `dbfilename` mà infra/docker-compose.yml đặt cho Redis riêng của handbook. */
 export const OWN_REDIS_MARKER = "mq-handbook.rdb";
 
 export interface ServerState {
@@ -159,7 +159,7 @@ export interface ServerState {
   policy: string;
 }
 
-/** Pure check: why this server must not be used by the lab, or null when it is safe. */
+/** Kiểm tra thuần: vì sao lab không được dùng server này, hoặc null khi an toàn. */
 export function guardProblem(state: ServerState, marker: string): string | null {
   if (state.dbfilename !== marker) {
     return `refusing to run: this Redis reports dbfilename "${state.dbfilename}", not the handbook marker "${marker}", so it is not the compose Redis of this repo (REDIS_URL points elsewhere?). Nothing was changed.`;
@@ -171,8 +171,8 @@ export function guardProblem(state: ServerState, marker: string): string | null 
 }
 
 /**
- * Throws unless the server is the handbook's own Redis in its pristine state.
- * Only reads (CONFIG GET): call it before the first CONFIG SET, and never restore after a refusal.
+ * Ném lỗi trừ khi server là Redis riêng của handbook ở trạng thái nguyên vẹn.
+ * Chỉ đọc (CONFIG GET): gọi trước lần CONFIG SET đầu tiên, và không bao giờ khôi phục sau khi bị từ chối.
  */
 export async function assertOwnRedis(redis: Redis, marker = OWN_REDIS_MARKER): Promise<void> {
   const problem = guardProblem(

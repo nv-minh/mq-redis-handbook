@@ -1,5 +1,5 @@
-// Command demo shows round trips of sequential vs pipelined commands, then naive vs Lua
-// check-and-decrement under 50 concurrent callers.
+// Command demo cho thấy số round trip của lệnh tuần tự so với pipeline, rồi check-and-decrement
+// kiểu naive so với Lua dưới 50 caller đồng thời.
 package main
 
 import (
@@ -82,8 +82,8 @@ func run() error {
 		rdb.Del(ctx, keys...)
 	}()
 
-	fmt.Println("== round trips: 100 SET commands ==")
-	// Warm up both connection pools so handshake writes are not counted.
+	fmt.Println("== round trip: 100 lệnh SET ==")
+	// Làm nóng cả hai connection pool để các write của bước handshake không bị đếm.
 	if err := lab.SetSequential(ctx, rdb, prefix+":seq", 1); err != nil {
 		return err
 	}
@@ -94,23 +94,23 @@ func run() error {
 	if err := lab.SetSequential(ctx, rdb, prefix+":seq", 100); err != nil {
 		return err
 	}
-	fmt.Println("sequential: socket writes =", counter.Writes())
+	fmt.Println("tuần tự:  số write trên socket =", counter.Writes())
 	counter.Reset()
 	if err := lab.SetPipelined(ctx, rdb, prefix+":pipe", 100); err != nil {
 		return err
 	}
-	fmt.Println("pipelined:  socket writes =", counter.Writes())
+	fmt.Println("pipeline: số write trên socket =", counter.Writes())
 
-	fmt.Printf("== %d concurrent callers share a counter that holds %d ==\n", callers, units)
+	fmt.Printf("== %d caller đồng thời dùng chung một counter đang giữ %d ==\n", callers, units)
 	ok, final, err := race(ctx, rdb, naiveKey, lab.DecrIfPositiveNaive)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("naive GET then DECR: %d callers succeeded, counter ended at %s\n", ok, final)
+	fmt.Printf("naive GET rồi DECR: %d caller thành công, counter kết thúc ở %s\n", ok, final)
 	ok, final, err = race(ctx, rdb, luaKey, lab.DecrIfPositive)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Lua script:          %d callers succeeded, counter ended at %s\n", ok, final)
+	fmt.Printf("Lua script:         %d caller thành công, counter kết thúc ở %s\n", ok, final)
 	return nil
 }

@@ -1,5 +1,5 @@
-// Demo: round trips of sequential vs pipelined commands, then naive vs Lua check-and-decrement
-// under 50 concurrent callers. All keys are removed at the end.
+// Demo: số round trip của lệnh tuần tự so với pipeline, rồi check-and-decrement kiểu naive so với Lua
+// dưới 50 caller đồng thời. Mọi key đều bị xóa ở cuối.
 import { Redis } from "ioredis";
 import { uniqueName } from "@handbook/testkit";
 import {
@@ -32,23 +32,23 @@ async function race(
 try {
   await Promise.all(clients.map((c) => c.ping()));
 
-  console.log("== round trips: 100 SET commands ==");
+  console.log("== round trip: 100 lệnh SET ==");
   const writes = await countSocketWrites(redis);
   writes.reset();
   await setSequential(redis, `${prefix}:seq`, 100);
-  console.log("sequential: socket writes =", writes.writes());
+  console.log("tuần tự:  số write trên socket =", writes.writes());
   writes.reset();
   await setPipelined(redis, `${prefix}:pipe`, 100);
-  console.log("pipelined:  socket writes =", writes.writes());
+  console.log("pipeline: số write trên socket =", writes.writes());
 
-  console.log(`== ${CALLERS} concurrent callers share a counter that holds ${UNITS} ==`);
+  console.log(`== ${CALLERS} caller đồng thời dùng chung một counter đang giữ ${UNITS} ==`);
   const naive = await race(decrIfPositiveNaive, counters.naive);
   console.log(
-    `naive GET then DECR: ${naive.successes} callers succeeded, counter ended at ${naive.finalValue}`,
+    `naive GET rồi DECR: ${naive.successes} caller thành công, counter kết thúc ở ${naive.finalValue}`,
   );
   const lua = await race(decrIfPositive, counters.lua);
   console.log(
-    `Lua script:          ${lua.successes} callers succeeded, counter ended at ${lua.finalValue}`,
+    `Lua script:         ${lua.successes} caller thành công, counter kết thúc ở ${lua.finalValue}`,
   );
 } finally {
   const pipeline = redis.pipeline();

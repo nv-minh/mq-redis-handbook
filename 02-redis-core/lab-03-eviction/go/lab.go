@@ -1,5 +1,5 @@
-// Package lab changes maxmemory and maxmemory-policy temporarily to watch Redis evict keys
-// (allkeys-lru) or reject writes (noeviction).
+// Package lab tạm thời đổi maxmemory và maxmemory-policy để xem Redis evict key
+// (allkeys-lru) hoặc từ chối lệnh ghi (noeviction).
 package lab
 
 import (
@@ -14,7 +14,7 @@ import (
 
 const batch = 50
 
-// Config holds the three settings this lab changes, as the strings CONFIG GET returns.
+// Config giữ ba setting mà lab này thay đổi, dưới dạng chuỗi mà CONFIG GET trả về.
 type Config struct {
 	Maxmemory string
 	Policy    string
@@ -22,19 +22,19 @@ type Config struct {
 }
 
 func configValue(ctx context.Context, rdb *redis.Client, name string) (string, error) {
-	// go-redis decodes the RESP3 map reply of CONFIG GET into map[string]string.
+	// go-redis giải mã reply dạng map RESP3 của CONFIG GET thành map[string]string.
 	m, err := rdb.ConfigGet(ctx, name).Result()
 	if err != nil {
 		return "", err
 	}
 	v, ok := m[name]
 	if !ok {
-		return "", fmt.Errorf("CONFIG GET %s returned %v", name, m)
+		return "", fmt.Errorf("CONFIG GET %s trả về %v", name, m)
 	}
 	return v, nil
 }
 
-// ReadConfig reads the current settings. Call it BEFORE the first CONFIG SET so you can put them back.
+// ReadConfig đọc các setting hiện tại. Gọi hàm này TRƯỚC lần CONFIG SET đầu tiên để còn có cái mà khôi phục.
 func ReadConfig(ctx context.Context, rdb *redis.Client) (Config, error) {
 	var c Config
 	var err error
@@ -48,8 +48,8 @@ func ReadConfig(ctx context.Context, rdb *redis.Client) (Config, error) {
 	return c, err
 }
 
-// WriteConfig applies settings. The policy goes first, so a lower maxmemory is never enforced
-// with the old policy.
+// WriteConfig áp dụng setting. Policy được đặt trước, để maxmemory thấp hơn không bao giờ
+// bị áp dụng với policy cũ.
 func WriteConfig(ctx context.Context, rdb *redis.Client, c Config) error {
 	if err := rdb.ConfigSet(ctx, "maxmemory-policy", c.Policy).Err(); err != nil {
 		return err
@@ -67,24 +67,24 @@ func infoNumber(ctx context.Context, rdb *redis.Client, section, field string) (
 	}
 	m := regexp.MustCompile(`(?m)^` + field + `:(\d+)`).FindStringSubmatch(info)
 	if m == nil {
-		return 0, fmt.Errorf("INFO %s has no %s", section, field)
+		return 0, fmt.Errorf("INFO %s không có %s", section, field)
 	}
 	return strconv.ParseInt(m[1], 10, 64)
 }
 
-// UsedMemory returns used_memory from INFO memory, in bytes.
+// UsedMemory trả về used_memory từ INFO memory, tính bằng byte.
 func UsedMemory(ctx context.Context, rdb *redis.Client) (int64, error) {
 	return infoNumber(ctx, rdb, "memory", "used_memory")
 }
 
-// EvictedKeys returns the number of keys the server has evicted since it started (INFO stats evicted_keys).
+// EvictedKeys trả về số key mà server đã evict kể từ lúc khởi động (INFO stats evicted_keys).
 func EvictedKeys(ctx context.Context, rdb *redis.Client) (int64, error) {
 	return infoNumber(ctx, rdb, "stats", "evicted_keys")
 }
 
-// LimitMemory caps memory relative to what is used right now, so the lab works on any baseline:
-// maxmemory = used_memory + headroomBytes. samples=10 makes approximate LRU closer to real LRU.
-// It returns the maxmemory it set, in bytes.
+// LimitMemory giới hạn bộ nhớ theo mức đang dùng ngay lúc này, để lab chạy được trên mọi baseline:
+// maxmemory = used_memory + headroomBytes. samples=10 làm LRU xấp xỉ gần với LRU thật hơn.
+// Hàm trả về maxmemory đã đặt, tính bằng byte.
 func LimitMemory(ctx context.Context, rdb *redis.Client, policy string, headroomBytes int64) (int64, error) {
 	used, err := UsedMemory(ctx, rdb)
 	if err != nil {
@@ -103,7 +103,7 @@ func value(size int) string {
 	return string(b)
 }
 
-// writeBatch pipelines SET for keys prefix:start .. prefix:end-1 and returns the first per-command error.
+// writeBatch gửi SET cho các key prefix:start .. prefix:end-1 qua pipeline và trả về lỗi đầu tiên của từng lệnh.
 func writeBatch(ctx context.Context, rdb *redis.Client, prefix string, start, end int, val string) error {
 	cmds, err := rdb.Pipelined(ctx, func(p redis.Pipeliner) error {
 		for i := start; i < end; i++ {
@@ -122,7 +122,7 @@ func writeBatch(ctx context.Context, rdb *redis.Client, prefix string, start, en
 	return nil
 }
 
-// SeedKeys writes count keys prefix:0 .. prefix:count-1, each holding valueSize bytes.
+// SeedKeys ghi count key prefix:0 .. prefix:count-1, mỗi key chứa valueSize byte.
 func SeedKeys(ctx context.Context, rdb *redis.Client, prefix string, count, valueSize int) error {
 	val := value(valueSize)
 	for start := 0; start < count; start += batch {
@@ -133,16 +133,16 @@ func SeedKeys(ctx context.Context, rdb *redis.Client, prefix string, count, valu
 	return nil
 }
 
-// FillOptions tunes FillUntilEviction. Zero values mean: 1024-byte values, no touch key, stop at 1 eviction.
+// FillOptions tinh chỉnh FillUntilEviction. Giá trị zero nghĩa là: value 1024 byte, không có touch key, dừng sau 1 lần evict.
 type FillOptions struct {
-	ValueSize  int    // bytes per value, default 1024
-	TouchKey   string // a key to GET after every batch, so it stays "recently used"
-	MinEvicted int64  // stop once at least this many keys were evicted, default 1
+	ValueSize  int    // số byte của mỗi value, mặc định 1024
+	TouchKey   string // một key được GET sau mỗi batch, để nó luôn "vừa được dùng"
+	MinEvicted int64  // dừng khi đã có ít nhất chừng này key bị evict, mặc định 1
 }
 
-// FillUntilEviction keeps writing prefix:0 .. (at most maxKeys keys, in batches of 50) until the
-// server has evicted at least MinEvicted keys. It returns how many keys were evicted during the
-// call (the delta of evicted_keys), 0 if the limit was never reached.
+// FillUntilEviction ghi liên tục prefix:0 .. (tối đa maxKeys key, theo batch 50) cho tới khi
+// server đã evict ít nhất MinEvicted key. Hàm trả về số key bị evict trong lúc gọi
+// (độ chênh của evicted_keys), 0 nếu chưa bao giờ chạm giới hạn.
 func FillUntilEviction(ctx context.Context, rdb *redis.Client, prefix string, maxKeys int, opts FillOptions) (int64, error) {
 	if opts.ValueSize == 0 {
 		opts.ValueSize = 1024
@@ -176,9 +176,9 @@ func FillUntilEviction(ctx context.Context, rdb *redis.Client, prefix string, ma
 	return now - before, err
 }
 
-// FillUntilRejected keeps writing prefix:0 .. until the server rejects a write. It returns the
-// error message of the first rejected write, or "" if all maxKeys writes succeeded.
-// Keys written before the rejection stay.
+// FillUntilRejected ghi liên tục prefix:0 .. cho tới khi server từ chối một lần ghi. Hàm trả về
+// message lỗi của lần ghi đầu tiên bị từ chối, hoặc "" nếu cả maxKeys lần ghi đều thành công.
+// Các key ghi trước lúc bị từ chối vẫn còn.
 func FillUntilRejected(ctx context.Context, rdb *redis.Client, prefix string, maxKeys, valueSize int) (string, error) {
 	val := value(valueSize)
 	for start := 0; start < maxKeys; start += batch {
@@ -192,7 +192,7 @@ func FillUntilRejected(ctx context.Context, rdb *redis.Client, prefix string, ma
 	return "", nil
 }
 
-// DeleteByPrefix deletes every key that starts with prefix+":", using SCAN (never KEYS) and UNLINK.
+// DeleteByPrefix xóa mọi key bắt đầu bằng prefix+":", dùng SCAN (không bao giờ dùng KEYS) và UNLINK.
 func DeleteByPrefix(ctx context.Context, rdb *redis.Client, prefix string) error {
 	iter := rdb.Scan(ctx, 0, prefix+":*", 1000).Iterator()
 	var keys []string
@@ -218,17 +218,17 @@ func DeleteByPrefix(ctx context.Context, rdb *redis.Client, prefix string) error
 	return flush()
 }
 
-// OwnRedisMarker is the dbfilename that infra/docker-compose.yml gives the handbook's own Redis.
+// OwnRedisMarker là dbfilename mà infra/docker-compose.yml đặt cho Redis riêng của handbook.
 const OwnRedisMarker = "mq-handbook.rdb"
 
-// ServerState is what the guard reads from the server.
+// ServerState là những gì guard đọc được từ server.
 type ServerState struct {
 	DBFilename string
 	Maxmemory  string
 	Policy     string
 }
 
-// GuardProblem is a pure check: why this server must not be used by the lab, or "" when it is safe.
+// GuardProblem là phép kiểm tra thuần: vì sao lab không được dùng server này, hoặc "" khi an toàn.
 func GuardProblem(s ServerState, marker string) string {
 	if s.DBFilename != marker {
 		return fmt.Sprintf("refusing to run: this Redis reports dbfilename %q, not the handbook marker %q, so it is not the compose Redis of this repo (REDIS_URL points elsewhere?). Nothing was changed.", s.DBFilename, marker)
@@ -239,8 +239,8 @@ func GuardProblem(s ServerState, marker string) string {
 	return ""
 }
 
-// AssertOwnRedis returns an error unless the server is the handbook's own Redis in its pristine
-// state. It only reads (CONFIG GET): call it before the first CONFIG SET, and never restore after a refusal.
+// AssertOwnRedis trả về error trừ khi server là Redis riêng của handbook ở trạng thái nguyên vẹn.
+// Hàm chỉ đọc (CONFIG GET): gọi trước lần CONFIG SET đầu tiên, và không bao giờ khôi phục sau khi bị từ chối.
 func AssertOwnRedis(ctx context.Context, rdb *redis.Client, marker string) error {
 	var s ServerState
 	var err error

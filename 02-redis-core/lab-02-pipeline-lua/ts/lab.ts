@@ -1,8 +1,8 @@
 import type { Redis } from "ioredis";
 
 /**
- * Check-and-decrement as ONE script, so no other client can run between the check and the DECR.
- * The script returns 1 when it decremented and 0 when the key is missing or not above zero.
+ * Check-and-decrement trong MỘT script, nên không client nào chen vào được giữa lúc kiểm tra và DECR.
+ * Script trả về 1 khi đã giảm và 0 khi key không tồn tại hoặc không lớn hơn 0.
  */
 const DECR_IF_POSITIVE_LUA = `
 local value = tonumber(redis.call('GET', KEYS[1]))
@@ -17,11 +17,11 @@ type WithLua = Redis & { decrIfPositiveLua(key: string): Promise<number> };
 const defined = new WeakSet<Redis>();
 
 /**
- * Atomically decrement `key` only when it holds a number above zero.
- * Resolves true when this call took one unit, false otherwise. Never creates the key and never
- * lets it go below zero, however many callers race.
+ * Giảm `key` một cách atomic, chỉ khi nó đang chứa một số lớn hơn 0.
+ * Resolve true khi lần gọi này lấy được một đơn vị, ngược lại false. Không bao giờ tạo key và
+ * không bao giờ để nó xuống dưới 0, dù có bao nhiêu caller tranh nhau.
  *
- * ioredis `defineCommand` sends EVALSHA and falls back to loading the script on NOSCRIPT.
+ * `defineCommand` của ioredis gửi EVALSHA và nạp lại script khi gặp NOSCRIPT.
  */
 export async function decrIfPositive(redis: Redis, key: string): Promise<boolean> {
   if (!defined.has(redis)) {
@@ -32,8 +32,8 @@ export async function decrIfPositive(redis: Redis, key: string): Promise<boolean
 }
 
 /**
- * The broken version, for the demo only: GET, decide in the client, then DECR.
- * Another client can DECR between the GET and the DECR, so the counter can go below zero.
+ * Phiên bản sai, chỉ dùng cho demo: GET, quyết định ở client, rồi DECR.
+ * Client khác có thể DECR giữa lúc GET và DECR, nên counter có thể xuống dưới 0.
  */
 export async function decrIfPositiveNaive(redis: Redis, key: string): Promise<boolean> {
   const value = Number(await redis.get(key));
@@ -44,12 +44,12 @@ export async function decrIfPositiveNaive(redis: Redis, key: string): Promise<bo
   return false;
 }
 
-/** `n` SET commands, each awaited before the next one is sent: n round trips. */
+/** `n` lệnh SET, mỗi lệnh được await xong mới gửi lệnh tiếp theo: n round trip. */
 export async function setSequential(redis: Redis, prefix: string, n: number): Promise<void> {
   for (let i = 0; i < n; i++) await redis.set(`${prefix}:${i}`, "1");
 }
 
-/** The same `n` SET commands queued in one pipeline and flushed together: 1 round trip. */
+/** Cũng `n` lệnh SET đó nhưng xếp vào một pipeline và gửi cùng lúc: 1 round trip. */
 export async function setPipelined(redis: Redis, prefix: string, n: number): Promise<void> {
   const pipeline = redis.pipeline();
   for (let i = 0; i < n; i++) pipeline.set(`${prefix}:${i}`, "1");
@@ -64,10 +64,10 @@ export interface WriteCounter {
 }
 
 /**
- * Count the writes ioredis makes on its socket. This is how the lab measures round trips without
- * a stopwatch: a command sent alone is one write, and a pipeline is flushed as a single write, so
- * "number of socket writes" equals "number of request/response round trips" here.
- * Resolves after connecting, because the socket only exists once the client is connected.
+ * Đếm số lần ioredis write trên socket. Đây là cách lab đo round trip mà không cần đồng hồ bấm giờ:
+ * một lệnh gửi riêng là một write, còn một pipeline được flush bằng một write duy nhất, nên
+ * "số lần write trên socket" bằng "số round trip request/response" ở đây.
+ * Resolve sau khi đã kết nối, vì socket chỉ tồn tại khi client đã kết nối.
  */
 export async function countSocketWrites(redis: Redis): Promise<WriteCounter> {
   await redis.ping();

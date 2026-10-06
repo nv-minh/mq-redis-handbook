@@ -1,5 +1,5 @@
-// Package lab compares sequential commands with a pipeline and makes check-and-decrement atomic
-// with a Lua script.
+// Package lab so sánh lệnh tuần tự với pipeline và làm check-and-decrement atomic
+// bằng một Lua script.
 package lab
 
 import (
@@ -11,8 +11,8 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// decrIfPositive checks and decrements in ONE script, so no other client can run between the
-// check and the DECR. It returns 1 when it decremented and 0 when the key is missing or not above zero.
+// decrIfPositive kiểm tra và giảm trong MỘT script, nên không client nào chen vào được giữa
+// lúc kiểm tra và DECR. Script trả về 1 khi đã giảm và 0 khi key không tồn tại hoặc không lớn hơn 0.
 var decrIfPositive = redis.NewScript(`
 local value = tonumber(redis.call('GET', KEYS[1]))
 if value and value > 0 then
@@ -22,9 +22,9 @@ end
 return 0
 `)
 
-// DecrIfPositive atomically decrements key only when it holds a number above zero.
-// It returns true when this call took one unit. It never creates the key and never lets it go
-// below zero, however many callers race. redis.Script sends EVALSHA and falls back to EVAL on NOSCRIPT.
+// DecrIfPositive giảm key một cách atomic, chỉ khi nó đang chứa một số lớn hơn 0.
+// Hàm trả về true khi lần gọi này lấy được một đơn vị. Không bao giờ tạo key và không bao giờ
+// để nó xuống dưới 0, dù có bao nhiêu caller tranh nhau. redis.Script gửi EVALSHA và chuyển sang EVAL khi gặp NOSCRIPT.
 func DecrIfPositive(ctx context.Context, rdb *redis.Client, key string) (bool, error) {
 	n, err := decrIfPositive.Run(ctx, rdb, []string{key}).Int()
 	if err != nil {
@@ -33,8 +33,8 @@ func DecrIfPositive(ctx context.Context, rdb *redis.Client, key string) (bool, e
 	return n == 1, nil
 }
 
-// DecrIfPositiveNaive is the broken version, for the demo only: GET, decide in the client, then DECR.
-// Another client can DECR between the GET and the DECR, so the counter can go below zero.
+// DecrIfPositiveNaive là phiên bản sai, chỉ dùng cho demo: GET, quyết định ở client, rồi DECR.
+// Client khác có thể DECR giữa lúc GET và DECR, nên counter có thể xuống dưới 0.
 func DecrIfPositiveNaive(ctx context.Context, rdb *redis.Client, key string) (bool, error) {
 	value, err := rdb.Get(ctx, key).Int64()
 	if err != nil && err != redis.Nil {
@@ -46,7 +46,7 @@ func DecrIfPositiveNaive(ctx context.Context, rdb *redis.Client, key string) (bo
 	return false, nil
 }
 
-// SetSequential sends n SET commands, each waiting for its reply before the next: n round trips.
+// SetSequential gửi n lệnh SET, mỗi lệnh chờ reply xong mới gửi lệnh tiếp theo: n round trip.
 func SetSequential(ctx context.Context, rdb *redis.Client, prefix string, n int) error {
 	for i := 0; i < n; i++ {
 		if err := rdb.Set(ctx, fmt.Sprintf("%s:%d", prefix, i), "1", 0).Err(); err != nil {
@@ -56,7 +56,7 @@ func SetSequential(ctx context.Context, rdb *redis.Client, prefix string, n int)
 	return nil
 }
 
-// SetPipelined sends the same n SET commands in one pipeline: 1 round trip.
+// SetPipelined gửi cũng n lệnh SET đó trong một pipeline: 1 round trip.
 func SetPipelined(ctx context.Context, rdb *redis.Client, prefix string, n int) error {
 	_, err := rdb.Pipelined(ctx, func(p redis.Pipeliner) error {
 		for i := 0; i < n; i++ {
@@ -67,13 +67,13 @@ func SetPipelined(ctx context.Context, rdb *redis.Client, prefix string, n int) 
 	return err
 }
 
-// WriteCounter counts Write calls on every connection a client opens.
+// WriteCounter đếm số lần gọi Write trên mọi connection mà một client mở.
 type WriteCounter struct{ n atomic.Int64 }
 
-// Writes returns the number of socket writes since the last Reset.
+// Writes trả về số lần write trên socket kể từ lần Reset gần nhất.
 func (c *WriteCounter) Writes() int64 { return c.n.Load() }
 
-// Reset sets the count back to zero.
+// Reset đặt bộ đếm về 0.
 func (c *WriteCounter) Reset() { c.n.Store(0) }
 
 type countingConn struct {
@@ -86,9 +86,9 @@ func (c *countingConn) Write(p []byte) (int, error) {
 	return c.Conn.Write(p)
 }
 
-// NewCountingClient returns a client whose connections count their socket writes.
-// This is how the lab measures round trips without a stopwatch: a command sent alone is one
-// write, and a pipeline is flushed as a single write, so writes equal request/response round trips.
+// NewCountingClient trả về một client mà các connection của nó đếm số lần write trên socket.
+// Đây là cách lab đo round trip mà không cần đồng hồ bấm giờ: một lệnh gửi riêng là một
+// write, còn một pipeline được flush bằng một write duy nhất, nên số write bằng số round trip request/response.
 func NewCountingClient(opts *redis.Options) (*redis.Client, *WriteCounter) {
 	counter := &WriteCounter{}
 	var dialer net.Dialer

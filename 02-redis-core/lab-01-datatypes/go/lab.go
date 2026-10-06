@@ -1,4 +1,4 @@
-// Package lab is a leaderboard on a Redis sorted set.
+// Package lab là bảng xếp hạng trên một Redis sorted set.
 package lab
 
 import (
@@ -7,32 +7,32 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// Entry is one leaderboard row.
+// Entry là một dòng của bảng xếp hạng.
 type Entry struct {
 	Name  string
 	Score float64
 }
 
-// Leaderboard keeps player scores in one sorted set: member = name, score = points.
+// Leaderboard giữ điểm của người chơi trong một sorted set: member = tên, score = điểm.
 type Leaderboard struct {
 	rdb *redis.Client
 	key string
 }
 
-// NewLeaderboard returns a leaderboard stored under key.
+// NewLeaderboard trả về bảng xếp hạng lưu dưới key.
 func NewLeaderboard(rdb *redis.Client, key string) *Leaderboard {
 	return &Leaderboard{rdb: rdb, key: key}
 }
 
-// Add sets the score of name. Adding an existing name replaces its score (no duplicate member).
+// Add đặt score của name. Thêm một tên đã có sẽ thay score của nó (không sinh member trùng).
 func (l *Leaderboard) Add(ctx context.Context, name string, score float64) error {
 	return l.rdb.ZAdd(ctx, l.key, redis.Z{Score: score, Member: name}).Err()
 }
 
-// Top returns the names of the n highest scores, best first.
-// It returns an empty non-nil slice for an empty board or n <= 0.
+// Top trả về tên của n điểm cao nhất, cao nhất trước.
+// Hàm trả về slice rỗng khác nil nếu bảng rỗng hoặc n <= 0.
 func (l *Leaderboard) Top(ctx context.Context, n int) ([]string, error) {
-	// ZRANGE key 0 -1 REV means "everything", so a non-positive n must not reach Redis.
+	// ZRANGE key 0 -1 REV nghĩa là "tất cả", nên n không dương không được gửi tới Redis.
 	if n <= 0 {
 		return []string{}, nil
 	}
@@ -46,8 +46,8 @@ func (l *Leaderboard) Top(ctx context.Context, n int) ([]string, error) {
 	return names, nil
 }
 
-// TopWithScores is Top with scores. go-redis decodes the RESP3 reply (a nested array of
-// [member, score] pairs, scores as doubles) into []redis.Z for us.
+// TopWithScores là Top kèm score. go-redis tự giải mã reply RESP3 (mảng lồng các cặp
+// [member, score], score là double) thành []redis.Z.
 func (l *Leaderboard) TopWithScores(ctx context.Context, n int) ([]Entry, error) {
 	if n <= 0 {
 		return []Entry{}, nil

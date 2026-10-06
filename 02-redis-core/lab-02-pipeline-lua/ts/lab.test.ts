@@ -5,8 +5,8 @@ import { countSocketWrites, decrIfPositive, setPipelined, setSequential } from "
 
 const url = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
 const CALLERS = 50;
-// Several connections, so the callers really hit the server in parallel (one socket would
-// serialize them on the client side and hide a race).
+// Nhiều connection, để các caller thực sự đập vào server song song (một socket sẽ
+// tuần tự hóa chúng ở phía client và che mất race).
 const clients = Array.from({ length: 10 }, () => new Redis(url));
 const redis = clients[0] as Redis;
 const createdKeys: string[] = [];
@@ -17,7 +17,7 @@ function newKey(label: string): string {
   return key;
 }
 
-/** Run `callers` decrIfPositive calls at the same time and return how many reported success. */
+/** Chạy `callers` lời gọi decrIfPositive cùng lúc và trả về số lời gọi báo thành công. */
 async function hammer(key: string, callers: number): Promise<number> {
   const results = await Promise.all(
     Array.from({ length: callers }, (_, i) =>
@@ -28,7 +28,7 @@ async function hammer(key: string, callers: number): Promise<number> {
 }
 
 beforeAll(async () => {
-  // Connect everything up front so the first calls of the test are not delayed by handshakes.
+  // Kết nối mọi client từ đầu để các lời gọi đầu tiên của test không bị chậm vì handshake.
   await Promise.all(clients.map((c) => c.ping()));
 });
 
@@ -55,10 +55,10 @@ describe("lab-02 pipeline and lua", () => {
     await setPipelined(redis, prefix, 100);
     const pipelinedTrips = counter.writes();
 
-    // Each awaited command is one write + one reply; the pipeline sends all 100 in one write.
+    // Mỗi lệnh được await là một write + một reply; pipeline gửi cả 100 lệnh trong một write.
     expect(sequentialTrips).toBe(100);
     expect(pipelinedTrips).toBe(1);
-    // Fewer round trips, same effect: all 100 keys exist.
+    // Ít round trip hơn, cùng kết quả: cả 100 key đều tồn tại.
     expect(await redis.mget(...keys)).toEqual(Array.from({ length: 100 }, () => "1"));
   });
 
@@ -68,7 +68,7 @@ describe("lab-02 pipeline and lua", () => {
 
     const successes = await hammer(key, CALLERS);
 
-    // 50 callers raced for 10 units: the counter stops at 0 and never turns negative.
+    // 50 caller tranh nhau 10 đơn vị: counter dừng ở 0 và không bao giờ âm.
     expect(await redis.get(key)).toBe("0");
     expect(successes).toBeLessThanOrEqual(10);
   });
@@ -98,12 +98,12 @@ describe("lab-02 pipeline and lua", () => {
   it("noscript_after_script_flush_is_recovered_by_the_client", async () => {
     const key = newKey("noscript");
     await redis.set(key, "2");
-    expect(await decrIfPositive(redis, key)).toBe(true); // script is now cached on the server
+    expect(await decrIfPositive(redis, key)).toBe(true); // script giờ đã được cache trên server
 
-    // The server forgets every cached script (this also happens on restart or failover).
+    // Server quên mọi script đã cache (điều này cũng xảy ra khi restart hoặc failover).
     await redis.script("FLUSH");
 
-    // EVALSHA fails with NOSCRIPT inside ioredis, which reloads the script and retries.
+    // EVALSHA fail với NOSCRIPT bên trong ioredis, ioredis nạp lại script và thử lại.
     expect(await decrIfPositive(redis, key)).toBe(true);
     expect(await redis.get(key)).toBe("0");
   });

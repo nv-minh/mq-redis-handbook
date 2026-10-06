@@ -2,6 +2,7 @@
 #   make up                      redis, rabbitmq, kafka, nats, postgres
 #   make up PROFILE=sentinel     + redis-master, 2 replicas, 3 sentinels
 #   make up PROFILE=cluster      + 6 cluster nodes and the redis-cluster-init job
+#   make up PROFILE="sentinel cluster"  both topologies (chapter 04 tests need both)
 #
 # Every published port is bound to 127.0.0.1 (default credentials, never expose them).
 # Host ports of the base services can be overridden when something else already uses them,

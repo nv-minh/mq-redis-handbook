@@ -39,6 +39,7 @@ pnpm install
 make up                      # redis, rabbitmq, kafka, nats, postgres
 make up PROFILE=sentinel     # thêm Redis Sentinel (master + 2 replica + 3 sentinel)
 make up PROFILE=cluster      # thêm Redis Cluster (6 node, tự khởi tạo)
+make up PROFILE="sentinel cluster" # cả hai topology cùng lúc (test chủ đề 04 cần cả hai)
 make lab-ts LAB=<NN-ten/lab-NN-ten>
 make lab-go LAB=<NN-ten/lab-NN-ten>
 make test                    # test script, TS và Go

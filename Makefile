@@ -2,7 +2,8 @@
 SHELL := /bin/bash
 
 COMPOSE_FILE := infra/docker-compose.yml
-# PROFILE=sentinel|cluster adds the optional Redis topologies to `make up`.
+# PROFILE adds the optional Redis topologies to `make up`: one profile (PROFILE=sentinel) or several
+# (PROFILE="sentinel cluster"; chapter 04 needs both).
 PROFILE ?=
 COMPOSE := docker compose -f $(COMPOSE_FILE)
 
@@ -15,7 +16,8 @@ TOPICS := $(wildcard [0-9][0-9]-*/)
 .PHONY: help up down lab-ts lab-go test test-ts test-go test-scripts lint lint-ts lint-go docs-check
 
 help:
-	@echo "make up [PROFILE=sentinel|cluster]   start brokers (docker compose up -d --wait)"
+	@echo "make up [PROFILE=...]               start brokers (docker compose up -d --wait)"
+	@echo "                                     PROFILE=sentinel, PROFILE=cluster or PROFILE=\"sentinel cluster\" (chapter 04)"
 	@echo "make down                            stop brokers and remove volumes"
 	@echo "make lab-ts LAB=<NN-ten/lab-NN-ten>  run a TypeScript lab demo"
 	@echo "make lab-go LAB=<NN-ten/lab-NN-ten>  run a Go lab demo"
@@ -24,7 +26,7 @@ help:
 	@echo "make docs-check                      validate theory.md and lab READMEs"
 
 up:
-	$(COMPOSE) $(if $(PROFILE),--profile $(PROFILE)) up -d --wait
+	$(COMPOSE) $(foreach p,$(PROFILE),--profile $(p)) up -d --wait
 
 down:
 	$(COMPOSE) --profile sentinel --profile cluster down -v --remove-orphans

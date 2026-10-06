@@ -49,7 +49,8 @@ test-ts:
 	pnpm exec vitest run
 
 test-go:
-	go test ./...
+	# -p 1: packages share one Redis, and lab-03-eviction changes its maxmemory settings for a few seconds.
+	go test -p 1 ./...
 
 lint: lint-ts lint-go
 	bash scripts/check-no-sleep.sh

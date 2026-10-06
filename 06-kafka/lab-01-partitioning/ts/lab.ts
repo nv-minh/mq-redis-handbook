@@ -75,10 +75,11 @@ export async function deleteGroup(groupId: string): Promise<void> {
           await admin.deleteGroups([groupId]);
           return true;
         } catch (error) {
-          // Group chưa từng tồn tại (consumer chưa kịp join) thì không có gì để xóa.
+          // Group chưa từng tồn tại (consumer chưa kịp join, hoặc group rỗng không có offset đã tự biến mất) thì không có gì để xóa.
+          // Lỗi của deleteGroups là KafkaJSDeleteGroupsError, mã lỗi nằm trong từng phần tử của `groups`.
           if (
-            error instanceof KafkaJS.KafkaJSError &&
-            error.code === KafkaJS.ErrorCodes.ERR_GROUP_ID_NOT_FOUND
+            error instanceof KafkaJS.KafkaJSDeleteGroupsError &&
+            error.groups.every((g) => g.errorCode === KafkaJS.ErrorCodes.ERR_GROUP_ID_NOT_FOUND)
           ) {
             return true;
           }
@@ -152,10 +153,16 @@ export interface ConsumedRecord {
  * Consumer không commit offset và group bị xóa khi xong.
  */
 export async function readTopic(topic: string): Promise<ConsumedRecord[]> {
-  const expected = await withAdmin(async (admin) => {
-    const offsets = await admin.fetchTopicOffsets(topic);
-    return offsets.reduce((sum, o) => sum + (Number(o.high) - Number(o.low)), 0);
-  });
+  // Ngay sau khi tạo topic, fetchTopicOffsets có thể báo lỗi leader tạm thời dù metadata đã có leader: eventually thử lại.
+  const expected = await withAdmin((admin) =>
+    eventually(
+      async () => {
+        const offsets = await admin.fetchTopicOffsets(topic);
+        return offsets.reduce((sum, o) => sum + (Number(o.high) - Number(o.low)), 0);
+      },
+      { timeoutMs: 20_000 },
+    ),
+  );
   if (expected === 0) return [];
 
   const groupId = `lab01-reader-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;

@@ -172,28 +172,43 @@ type Record struct {
 
 // ReadTopic đọc mọi message đang có trong topic từ đầu, từng partition một bằng reader không có group.
 // Điều kiện dừng không dùng sleep: mỗi partition được đọc tới offset cuối cùng mà ListOffsets báo lúc bắt đầu.
+// Ngay sau khi tạo topic, ListOffsets có thể báo NotLeaderForPartition hoặc LeaderNotAvailable dù metadata đã có leader,
+// nên bước lấy offset được thử lại tới khi hết lỗi hoặc hết 20 giây.
 func ReadTopic(ctx context.Context, topic string) ([]Record, error) {
 	c := client()
-	md, err := c.Metadata(ctx, &kafka.MetadataRequest{Topics: []string{topic}})
-	if err != nil {
-		return nil, err
-	}
-	if len(md.Topics) != 1 {
-		return nil, fmt.Errorf("không có metadata của topic %s", topic)
-	}
-	req := map[string][]kafka.OffsetRequest{}
-	for _, p := range md.Topics[0].Partitions {
-		req[topic] = append(req[topic], kafka.FirstOffsetOf(p.ID), kafka.LastOffsetOf(p.ID))
-	}
-	offsets, err := c.ListOffsets(ctx, &kafka.ListOffsetsRequest{Topics: req})
+	var ranges []kafka.PartitionOffsets
+	err := poll(ctx, 20*time.Second, func() (bool, error) {
+		md, err := c.Metadata(ctx, &kafka.MetadataRequest{Topics: []string{topic}})
+		if err != nil {
+			return false, err
+		}
+		if len(md.Topics) != 1 {
+			return false, fmt.Errorf("không có metadata của topic %s", topic)
+		}
+		req := map[string][]kafka.OffsetRequest{}
+		for _, p := range md.Topics[0].Partitions {
+			req[topic] = append(req[topic], kafka.FirstOffsetOf(p.ID), kafka.LastOffsetOf(p.ID))
+		}
+		offsets, err := c.ListOffsets(ctx, &kafka.ListOffsetsRequest{Topics: req})
+		if err != nil {
+			return false, err
+		}
+		for _, po := range offsets.Topics[topic] {
+			if errors.Is(po.Error, kafka.NotLeaderForPartition) || errors.Is(po.Error, kafka.LeaderNotAvailable) {
+				return false, nil
+			}
+			if po.Error != nil {
+				return false, po.Error
+			}
+		}
+		ranges = offsets.Topics[topic]
+		return true, nil
+	})
 	if err != nil {
 		return nil, err
 	}
 	var records []Record
-	for _, po := range offsets.Topics[topic] {
-		if po.Error != nil {
-			return nil, po.Error
-		}
+	for _, po := range ranges {
 		count := po.LastOffset - po.FirstOffset
 		if count == 0 {
 			continue

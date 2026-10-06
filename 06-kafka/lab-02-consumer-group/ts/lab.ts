@@ -73,10 +73,11 @@ export async function deleteGroup(groupId: string): Promise<void> {
           await admin.deleteGroups([groupId]);
           return true;
         } catch (error) {
-          // Group chưa từng tồn tại (consumer chưa kịp join) thì không có gì để xóa.
+          // Group chưa từng tồn tại (consumer chưa kịp join, hoặc group rỗng không có offset đã tự biến mất) thì không có gì để xóa.
+          // Lỗi của deleteGroups là KafkaJSDeleteGroupsError, mã lỗi nằm trong từng phần tử của `groups`.
           if (
-            error instanceof KafkaJS.KafkaJSError &&
-            error.code === KafkaJS.ErrorCodes.ERR_GROUP_ID_NOT_FOUND
+            error instanceof KafkaJS.KafkaJSDeleteGroupsError &&
+            error.groups.every((g) => g.errorCode === KafkaJS.ErrorCodes.ERR_GROUP_ID_NOT_FOUND)
           ) {
             return true;
           }

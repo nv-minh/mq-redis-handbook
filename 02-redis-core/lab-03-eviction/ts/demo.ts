@@ -4,6 +4,7 @@
 import { Redis } from "ioredis";
 import { eventually, uniqueName } from "@handbook/testkit";
 import {
+  assertOwnRedis,
   deleteByPrefix,
   evictedKeys,
   fillUntilEviction,
@@ -16,6 +17,7 @@ import {
 
 const redis = new Redis(process.env.REDIS_URL ?? "redis://127.0.0.1:6379");
 const prefix = uniqueName("demo:eviction");
+await assertOwnRedis(redis); // refuse on a foreign or dirty Redis before any CONFIG SET
 const original = await readConfig(redis);
 const HEADROOM = 256 * 1024;
 const COLD_KEYS = 1500;

@@ -4,6 +4,7 @@ package lab
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -215,4 +216,45 @@ func DeleteByPrefix(ctx context.Context, rdb *redis.Client, prefix string) error
 		return err
 	}
 	return flush()
+}
+
+// OwnRedisMarker is the dbfilename that infra/docker-compose.yml gives the handbook's own Redis.
+const OwnRedisMarker = "mq-handbook.rdb"
+
+// ServerState is what the guard reads from the server.
+type ServerState struct {
+	DBFilename string
+	Maxmemory  string
+	Policy     string
+}
+
+// GuardProblem is a pure check: why this server must not be used by the lab, or "" when it is safe.
+func GuardProblem(s ServerState, marker string) string {
+	if s.DBFilename != marker {
+		return fmt.Sprintf("refusing to run: this Redis reports dbfilename %q, not the handbook marker %q, so it is not the compose Redis of this repo (REDIS_URL points elsewhere?). Nothing was changed.", s.DBFilename, marker)
+	}
+	if s.Maxmemory != "0" || s.Policy != "noeviction" {
+		return fmt.Sprintf("refusing to run: maxmemory=%s policy=%s is not pristine (maxmemory 0, noeviction). Leftover config from an earlier run, run `make down && make up`. Nothing was changed.", s.Maxmemory, s.Policy)
+	}
+	return ""
+}
+
+// AssertOwnRedis returns an error unless the server is the handbook's own Redis in its pristine
+// state. It only reads (CONFIG GET): call it before the first CONFIG SET, and never restore after a refusal.
+func AssertOwnRedis(ctx context.Context, rdb *redis.Client, marker string) error {
+	var s ServerState
+	var err error
+	if s.DBFilename, err = configValue(ctx, rdb, "dbfilename"); err != nil {
+		return err
+	}
+	if s.Maxmemory, err = configValue(ctx, rdb, "maxmemory"); err != nil {
+		return err
+	}
+	if s.Policy, err = configValue(ctx, rdb, "maxmemory-policy"); err != nil {
+		return err
+	}
+	if msg := GuardProblem(s, marker); msg != "" {
+		return errors.New(msg)
+	}
+	return nil
 }

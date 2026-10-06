@@ -40,6 +40,9 @@ func run() (err error) {
 	defer func() { _ = rdb.Close() }()
 
 	prefix := testkit.UniqueName("demo:eviction")
+	if err := lab.AssertOwnRedis(ctx, rdb, lab.OwnRedisMarker); err != nil { // refuse before any CONFIG SET
+		return err
+	}
 	original, err := lab.ReadConfig(ctx, rdb)
 	if err != nil {
 		return err

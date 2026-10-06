@@ -16,7 +16,9 @@ x-redis-node: &redis-node
 services:
   redis:
     image: redis:8.10.2
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    # --dbfilename is a marker: lab 03 refuses to CONFIG SET maxmemory on a Redis that does not report it.
+    # Harmless because persistence is off.
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--dbfilename", "mq-handbook.rdb"]
     ports:
       - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     healthcheck:

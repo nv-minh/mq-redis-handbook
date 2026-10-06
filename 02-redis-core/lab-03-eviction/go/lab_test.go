@@ -41,6 +41,11 @@ func setup(t *testing.T) (*redis.Client, string) {
 	t.Cleanup(func() { _ = rdb.Close() })
 
 	ctx := context.Background()
+	// Refuse before any CONFIG SET: wrong server or leftover config. No restore cleanup is
+	// registered yet, so a refusal never writes config back.
+	if err := AssertOwnRedis(ctx, rdb, OwnRedisMarker); err != nil {
+		t.Fatal(err)
+	}
 	original, err := ReadConfig(ctx, rdb)
 	if err != nil {
 		t.Fatalf("read config: %v", err)
@@ -196,5 +201,32 @@ func TestConfigIsRestoredToTheSavedValues(t *testing.T) {
 	}
 	if got, _ := ReadConfig(ctx, rdb); got != original {
 		t.Fatalf("config = %+v, want %+v", got, original)
+	}
+}
+
+func TestGuardRefusesARedisWithoutTheHandbookMarkerAndChangesNothing(t *testing.T) {
+	ctx := context.Background()
+	rdb, _ := setup(t)
+	before, err := ReadConfig(ctx, rdb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = AssertOwnRedis(ctx, rdb, "some-other-marker.rdb")
+	if err == nil || !strings.Contains(err.Error(), "not the handbook marker") {
+		t.Fatalf("AssertOwnRedis = %v, want a refusal naming the marker", err)
+	}
+	if after, _ := ReadConfig(ctx, rdb); after != before { // read-only: no CONFIG SET happened
+		t.Fatalf("config changed from %+v to %+v", before, after)
+	}
+}
+
+func TestGuardRefusesLeftoverConfigWithAHintToRecreateTheStack(t *testing.T) {
+	state := ServerState{DBFilename: OwnRedisMarker, Maxmemory: "4000000", Policy: "allkeys-lru"}
+	if msg := GuardProblem(state, OwnRedisMarker); !strings.Contains(msg, "make down && make up") {
+		t.Fatalf("GuardProblem = %q, want the recreate hint", msg)
+	}
+	state.Maxmemory, state.Policy = "0", "noeviction"
+	if msg := GuardProblem(state, OwnRedisMarker); msg != "" {
+		t.Fatalf("GuardProblem on a pristine server = %q, want empty", msg)
 	}
 }

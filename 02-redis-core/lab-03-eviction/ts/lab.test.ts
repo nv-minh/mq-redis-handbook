@@ -2,10 +2,12 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { Redis } from "ioredis";
 import { eventually, uniqueName } from "@handbook/testkit";
 import {
+  assertOwnRedis,
   deleteByPrefix,
   evictedKeys,
   fillUntilEviction,
   fillUntilRejected,
+  guardProblem,
   limitMemory,
   readConfig,
   seedKeys,
@@ -36,6 +38,9 @@ async function restore(): Promise<void> {
 }
 
 beforeAll(async () => {
+  // Refuse before any CONFIG SET: wrong server or leftover config. `original` stays unset on
+  // refusal, so afterAll never writes config back.
+  await assertOwnRedis(redis);
   // Save BEFORE the first CONFIG SET, so there is always something to restore.
   original = await readConfig(redis);
 });
@@ -117,5 +122,23 @@ describe("lab-03 eviction", () => {
     await writeConfig(redis, original);
 
     expect(await readConfig(redis)).toEqual(original);
+  });
+});
+
+describe("lab-03 safety guard", () => {
+  it("guard_refuses_a_redis_without_the_handbook_marker_and_changes_nothing", async () => {
+    const before = await readConfig(redis);
+    await expect(assertOwnRedis(redis, "some-other-marker.rdb")).rejects.toThrow(
+      /refusing to run.*not the handbook marker/,
+    );
+    expect(await readConfig(redis)).toEqual(before); // read-only: no CONFIG SET happened
+  });
+
+  it("guard_refuses_leftover_config_with_a_hint_to_recreate_the_stack", () => {
+    const state = { dbfilename: "mq-handbook.rdb", maxmemory: "4000000", policy: "allkeys-lru" };
+    expect(guardProblem(state, "mq-handbook.rdb")).toMatch(/make down && make up/);
+    expect(
+      guardProblem({ ...state, maxmemory: "0", policy: "noeviction" }, "mq-handbook.rdb"),
+    ).toBeNull();
   });
 });

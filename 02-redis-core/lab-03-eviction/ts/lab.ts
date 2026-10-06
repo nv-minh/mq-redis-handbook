@@ -149,3 +149,39 @@ export async function deleteByPrefix(redis: Redis, prefix: string): Promise<void
     if (keys.length > 0) await redis.unlink(...keys);
   } while (cursor !== "0");
 }
+
+/** Value of `dbfilename` that infra/docker-compose.yml gives the handbook's own Redis. */
+export const OWN_REDIS_MARKER = "mq-handbook.rdb";
+
+export interface ServerState {
+  dbfilename: string;
+  maxmemory: string;
+  policy: string;
+}
+
+/** Pure check: why this server must not be used by the lab, or null when it is safe. */
+export function guardProblem(state: ServerState, marker: string): string | null {
+  if (state.dbfilename !== marker) {
+    return `refusing to run: this Redis reports dbfilename "${state.dbfilename}", not the handbook marker "${marker}", so it is not the compose Redis of this repo (REDIS_URL points elsewhere?). Nothing was changed.`;
+  }
+  if (state.maxmemory !== "0" || state.policy !== "noeviction") {
+    return `refusing to run: maxmemory=${state.maxmemory} policy=${state.policy} is not pristine (maxmemory 0, noeviction). Leftover config from an earlier run, run \`make down && make up\`. Nothing was changed.`;
+  }
+  return null;
+}
+
+/**
+ * Throws unless the server is the handbook's own Redis in its pristine state.
+ * Only reads (CONFIG GET): call it before the first CONFIG SET, and never restore after a refusal.
+ */
+export async function assertOwnRedis(redis: Redis, marker = OWN_REDIS_MARKER): Promise<void> {
+  const problem = guardProblem(
+    {
+      dbfilename: await configValue(redis, "dbfilename"),
+      maxmemory: await configValue(redis, "maxmemory"),
+      policy: await configValue(redis, "maxmemory-policy"),
+    },
+    marker,
+  );
+  if (problem) throw new Error(problem);
+}

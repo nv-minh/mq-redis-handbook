@@ -15,6 +15,7 @@ Lý thuyết nằm ở [theory.md](../theory.md).
 Lab này chạy `CONFIG SET maxmemory`, `maxmemory-policy` và `maxmemory-samples` trên server mà nó kết nối, rồi khôi phục giá trị cũ.
 Chỉ chạy với Redis của stack compose trong repo này (`make up`, project `mq-handbook`, container `mq-handbook-redis-1`).
 Không đặt `REDIS_URL` trỏ tới một Redis dùng chung hoặc Redis của dự án khác.
+Một guard trong code chặn việc đó: trước mọi `CONFIG SET`, test và demo đọc `CONFIG GET dbfilename` và từ chối chạy nếu không bằng marker `mq-handbook.rdb` (do `infra/docker-compose.yml` đặt cho Redis của repo), hoặc nếu `maxmemory` khác 0 hay policy khác `noeviction` (config sót lại từ lần chạy trước, hãy chạy `make down && make up`).
 Config được lưu trước lệnh `CONFIG SET` đầu tiên và được khôi phục trong `afterEach` và `afterAll` (TS), hay `t.Cleanup` (Go), kể cả khi test fail.
 Nếu tiến trình bị kill giữa chừng thì config có thể còn sót, cách sửa nhanh là `make down && make up`.
 

@@ -102,7 +102,9 @@ let sharedProducer: KafkaJS.Producer | undefined;
 /** Producer dùng chung của lab, connect ở lần dùng đầu. `idempotent` giữ thứ tự khi producer phải retry. */
 async function producer(): Promise<KafkaJS.Producer> {
   if (sharedProducer === undefined) {
-    const p = newKafka().producer({ kafkaJS: { acks: -1, idempotent: true } });
+    const p = newKafka().producer({
+      kafkaJS: { acks: -1, idempotent: true, allowAutoTopicCreation: false },
+    });
     await p.connect();
     sharedProducer = p;
   }
@@ -167,7 +169,7 @@ export async function readTopic(topic: string): Promise<ConsumedRecord[]> {
 
   const groupId = `lab01-reader-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const consumer = newKafka().consumer({
-    kafkaJS: { groupId, fromBeginning: true, autoCommit: false },
+    kafkaJS: { groupId, fromBeginning: true, autoCommit: false, allowAutoTopicCreation: false },
   });
   const records: ConsumedRecord[] = [];
   await consumer.connect();

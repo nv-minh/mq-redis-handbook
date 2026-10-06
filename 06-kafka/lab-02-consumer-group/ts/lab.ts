@@ -93,7 +93,9 @@ let sharedProducer: KafkaJS.Producer | undefined;
 
 async function producer(): Promise<KafkaJS.Producer> {
   if (sharedProducer === undefined) {
-    const p = newKafka().producer({ kafkaJS: { acks: -1, idempotent: true } });
+    const p = newKafka().producer({
+      kafkaJS: { acks: -1, idempotent: true, allowAutoTopicCreation: false },
+    });
     await p.connect();
     sharedProducer = p;
   }
@@ -147,7 +149,7 @@ export async function startGroupMember(
         onAssign(assignment.filter((a) => a.topic === topic).map((a) => a.partition));
       }
     },
-    kafkaJS: { groupId, fromBeginning: true },
+    kafkaJS: { groupId, fromBeginning: true, allowAutoTopicCreation: false },
   });
   await consumer.connect();
   let stopped: Promise<void> | undefined;

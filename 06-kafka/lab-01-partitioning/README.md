@@ -115,6 +115,9 @@ Cấu hình producer của lab:
 
 Ack của wrapper TypeScript đặt offset trong trường `baseOffset` (không phải `offset`), và lab gửi mỗi lần một message nên `baseOffset` chính là offset của nó.
 
+Producer và consumer TypeScript đặt `allowAutoTopicCreation: false` (mặc định của kafka-javascript là `true`).
+Không đặt thì một consumer còn chạy sau khi topic bị xóa trong teardown có thể tạo lại topic với 1 partition và để rác trên broker: lab đã gặp đúng chuyện này ở test đọc lại topic (cơ chế chính xác chưa xác minh).
+
 Test đọc lại topic không dùng sleep: điều kiện dừng so sánh số message đã nhận với high watermark trừ low watermark (TypeScript) hoặc đọc tới `LastOffset` mà `ListOffsets` báo (Go).
 Tạo topic xong, lab chờ metadata báo đủ 3 partition và mọi partition có leader trước khi produce, vì wrapper TypeScript chưa hỗ trợ `waitForLeaders`.
 

@@ -93,7 +93,9 @@ let sharedProducer: KafkaJS.Producer | undefined;
 
 async function producer(): Promise<KafkaJS.Producer> {
   if (sharedProducer === undefined) {
-    const p = newKafka().producer({ kafkaJS: { acks: -1, idempotent: true } });
+    const p = newKafka().producer({
+      kafkaJS: { acks: -1, idempotent: true, allowAutoTopicCreation: false },
+    });
     await p.connect();
     sharedProducer = p;
   }
@@ -118,7 +120,9 @@ export async function produce(topic: string, key: string, value: string): Promis
  * `auto.offset.reset=earliest`) và TẮT auto commit: offset chỉ được lưu khi code gọi `commitOffsets`.
  */
 function newConsumer(groupId: string): KafkaJS.Consumer {
-  return newKafka().consumer({ kafkaJS: { groupId, fromBeginning: true, autoCommit: false } });
+  return newKafka().consumer({
+    kafkaJS: { groupId, fromBeginning: true, autoCommit: false, allowAutoTopicCreation: false },
+  });
 }
 
 /** Đọc `message` thành chuỗi value. */

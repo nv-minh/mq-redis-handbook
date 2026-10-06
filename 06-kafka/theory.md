@@ -280,7 +280,7 @@ Chọn dựa trên mô hình, không phải "cái nào nhanh hơn": cần xử l
 ## Lỗi thường gặp
 
 - Topic tự tạo chỉ có 1 partition: test "nhiều consumer chia partition" không thấy phân tán và consumer thứ hai ngồi không.
-  Hãy tạo topic tường minh với N partition bằng admin client (mọi lab làm vậy).
+  Hãy tạo topic tường minh với N partition bằng admin client (mọi lab làm vậy), và đặt `allowAutoTopicCreation: false` cho producer và consumer của kafka-javascript (mặc định là `true`, lab đã thấy một consumer tạo lại topic với 1 partition sau khi topic bị xóa).
 - Cùng key rơi vào partition khác nhau giữa các dịch vụ: mỗi client dùng hash khác nhau, và kafka-go mặc định round-robin.
   Hãy thống nhất một thuật toán cho mọi producer (`Murmur2Balancer` ở Go để khớp Java và kafka-javascript) và ghi vào hợp đồng của topic.
 - Tăng số partition làm vỡ quan hệ key-partition: cùng key chuyển sang partition khác, và với `auto.offset.reset=latest` message vào partition mới có thể bị bỏ qua.

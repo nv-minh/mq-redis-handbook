@@ -58,6 +58,30 @@ async function runAll(steps: (() => Promise<unknown>)[]): Promise<void> {
   if (failed) throw (failed as PromiseRejectedResult).reason;
 }
 
+/**
+ * Chờ child ghi marker vào Redis. Nếu child thoát hoặc không khởi động được thì báo lỗi ngay, không đợi hết timeout,
+ * để lỗi kèm stderr của child (khối catch của test ghép nó vào) hiện ra nhanh khi child hỏng lúc khởi động.
+ */
+async function waitForMarker(key: string, child: ChildProcess, timeoutMs: number): Promise<string> {
+  let gone: string | undefined;
+  child.once("error", (error) => (gone ??= `child không khởi động được: ${error.message}`));
+  child.once(
+    "close",
+    (code, signal) =>
+      (gone ??= `child đã thoát trước khi báo marker (code ${code}, signal ${signal})`),
+  );
+  const result = await eventually(
+    async () => {
+      const value = await redis.get(key);
+      if (value !== null) return { marker: value };
+      return gone === undefined ? undefined : { gone };
+    },
+    { timeoutMs },
+  );
+  if ("gone" in result) throw new Error(result.gone);
+  return result.marker;
+}
+
 afterEach(async () => {
   // Thứ tự có chủ đích: child chết trước (nhả lock), rồi pool đóng, rồi mới DROP SCHEMA.
   const errors: unknown[] = [];
@@ -358,9 +382,7 @@ describe("chaos", () => {
 
     try {
       // Chờ child báo "đã publish và confirm xong event đầu" (marker ngắn hơn timeout của test).
-      const markedId = await eventually(async () => (await redis.get(marker)) ?? undefined, {
-        timeoutMs: 30_000,
-      });
+      const markedId = await waitForMarker(marker, child, 30_000);
       expect(markedId).toBe(first);
       await eventually(async () => (broker.deliveries.get(first!) ?? 0) >= 1 || undefined, {
         timeoutMs: 10_000,

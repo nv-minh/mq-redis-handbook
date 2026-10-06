@@ -63,6 +63,30 @@ async function reapChildren(): Promise<void> {
   );
 }
 
+/**
+ * Chờ child ghi marker vào Redis. Nếu child thoát hoặc không khởi động được thì báo lỗi ngay, không đợi hết timeout,
+ * để lỗi kèm stderr của child (khối catch của test ghép nó vào) hiện ra nhanh khi child hỏng lúc khởi động.
+ */
+async function waitForMarker(key: string, child: ChildProcess, timeoutMs: number): Promise<string> {
+  let gone: string | undefined;
+  child.once("error", (error) => (gone ??= `child không khởi động được: ${error.message}`));
+  child.once(
+    "close",
+    (code, signal) =>
+      (gone ??= `child đã thoát trước khi báo marker (code ${code}, signal ${signal})`),
+  );
+  const result = await eventually(
+    async () => {
+      const value = await redis.get(key);
+      if (value !== null) return { marker: value };
+      return gone === undefined ? undefined : { gone };
+    },
+    { timeoutMs },
+  );
+  if ("gone" in result) throw new Error(result.gone);
+  return result.marker;
+}
+
 afterEach(async () => {
   try {
     await reapChildren();
@@ -286,9 +310,7 @@ describe("chaos", () => {
 
     try {
       // Chờ tới khi child báo đã nhận message (không sleep, không đoán thời gian khởi động).
-      const startedId = await eventually(async () => (await redis.get(names.marker)) ?? undefined, {
-        timeoutMs: 30_000,
-      });
+      const startedId = await waitForMarker(names.marker, child, 20_000);
       expect(startedId).toBe(id);
       const [pending] = await parent.pendingEntries();
       expect(pending).toMatchObject({ id, consumer: childConsumer, deliveryCount: 1 });

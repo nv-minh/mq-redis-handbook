@@ -303,9 +303,19 @@ func TestChaosWorkerKilledMidProcessingMessageIsProcessedByAnother(t *testing.T)
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("không khởi động được helper process: %v", err)
 	}
+	// Cleanup chạy ngược thứ tự đăng ký: khối này đăng ký TRƯỚC reap nên chạy SAU nó, khi buffer stderr đã đầy đủ.
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("stderr của child:\n%s", stderr.String())
+		}
+	})
 	// Luôn kill và reap child, kể cả khi test fail: không để process mồ côi.
 	waited := make(chan error, 1)
-	go func() { waited <- cmd.Wait() }()
+	exited := make(chan struct{}) // đóng khi child đã thoát, để test fail nhanh nếu child chết lúc khởi động
+	go func() {
+		waited <- cmd.Wait()
+		close(exited)
+	}()
 	reaped := false
 	reap := func() error {
 		if reaped {
@@ -323,13 +333,21 @@ func TestChaosWorkerKilledMidProcessingMessageIsProcessedByAnother(t *testing.T)
 	t.Cleanup(func() { _ = reap() })
 	fail := func(format string, args ...any) {
 		t.Helper()
-		t.Fatalf(format+"\nstderr của child:\n%s", append(args, stderr.String())...)
+		t.Fatalf(format, args...) // stderr của child được in bởi Cleanup
 	}
 
 	// Chờ tới khi child báo đã nhận message (không sleep, không đoán thời gian khởi động).
 	startedID := testkit.Eventually(t, 30*time.Second, func() (string, bool) {
 		v, err := e.commands.Get(ctx, n.marker).Result()
-		return v, err == nil
+		if err == nil {
+			return v, true
+		}
+		select {
+		case <-exited:
+			fail("child đã thoát trước khi báo marker (xem stderr của child bên dưới)")
+		default:
+		}
+		return "", false
 	})
 	if startedID != id {
 		fail("child báo bắt đầu message %q, mong đợi %q", startedID, id)

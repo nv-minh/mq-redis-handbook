@@ -13,7 +13,12 @@ GOLANGCI_LINT := $(or $(shell command -v golangci-lint),go run github.com/golang
 
 TOPICS := $(wildcard [0-9][0-9]-*/)
 
-.PHONY: help up down lab-ts lab-go test test-ts test-go test-scripts lint lint-ts lint-go docs-check
+# Chapter 04 labs that need the sentinel and cluster profiles. They hold every chaos test
+# (describe("chaos") in TypeScript, TestChaos* in Go), which stops and restarts Redis containers.
+# `make test-fast` skips these labs, `make test-chaos` runs only these labs.
+TOPOLOGY_LABS := 04-redis-advanced/lab-01-sentinel 04-redis-advanced/lab-02-cluster
+
+.PHONY: help up down lab-ts lab-go test test-ts test-go test-scripts test-fast test-fast-ts test-fast-go test-chaos test-chaos-ts test-chaos-go lint lint-ts lint-go docs-check mermaid-check
 
 help:
 	@echo "make up [PROFILE=...]               start brokers (docker compose up -d --wait)"
@@ -21,9 +26,12 @@ help:
 	@echo "make down                            stop brokers and remove volumes"
 	@echo "make lab-ts LAB=<NN-ten/lab-NN-ten>  run a TypeScript lab demo"
 	@echo "make lab-go LAB=<NN-ten/lab-NN-ten>  run a Go lab demo"
-	@echo "make test | test-ts | test-go        run tests (needs 'make up' first for labs)"
+	@echo "make test | test-ts | test-go        run all tests (needs 'make up PROFILE=\"sentinel cluster\"' first)"
+	@echo "make test-fast                       all tests except the sentinel and cluster labs (needs plain 'make up')"
+	@echo "make test-chaos                      only the sentinel and cluster labs, chaos tests included (needs PROFILE=\"sentinel cluster\")"
 	@echo "make lint                            eslint, prettier, tsc, golangci-lint, no-sleep gate, compose check"
 	@echo "make docs-check                      validate theory.md and lab READMEs"
+	@echo "make mermaid-check [FILES=...]       check that every mermaid block parses (mmdc, needs Chromium from pnpm install)"
 
 up:
 	$(COMPOSE) $(foreach p,$(PROFILE),--profile $(p)) up -d --wait
@@ -46,6 +54,7 @@ test-scripts:
 	bash scripts/check-compose.test.sh
 	bash scripts/check-no-sleep.test.sh
 	bash scripts/check-tsconfig.test.sh
+	bash scripts/check-mermaid.test.sh
 
 test-ts:
 	pnpm exec vitest run
@@ -53,6 +62,24 @@ test-ts:
 test-go:
 	# -p 1: packages share one Redis, and lab-03-eviction changes its maxmemory settings for a few seconds.
 	go test -p 1 ./...
+
+# Fast loop and CI: everything that runs on the base stack (no sentinel or cluster profile).
+test-fast: test-fast-ts test-fast-go
+
+test-fast-ts:
+	pnpm exec vitest run $(foreach lab,$(TOPOLOGY_LABS),--exclude '$(lab)/**')
+
+test-fast-go:
+	go test -p 1 $$(go list ./... | grep -v $(foreach lab,$(TOPOLOGY_LABS),-e '/$(lab)/go'))
+
+# Chaos and topology tests: need `make up PROFILE="sentinel cluster"`. Sequential, they share the topology.
+test-chaos: test-chaos-ts test-chaos-go
+
+test-chaos-ts:
+	pnpm exec vitest run $(TOPOLOGY_LABS)
+
+test-chaos-go:
+	go test -p 1 $(foreach lab,$(TOPOLOGY_LABS),./$(lab)/...)
 
 lint: lint-ts lint-go
 	bash scripts/check-no-sleep.sh
@@ -69,3 +96,6 @@ lint-go:
 
 docs-check:
 	bash scripts/check-docs.sh $(TOPICS)
+
+mermaid-check:
+	bash scripts/check-mermaid.sh $(FILES)

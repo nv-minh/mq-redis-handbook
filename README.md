@@ -15,9 +15,9 @@ Chủ đề nào chưa có thư mục thì được đánh dấu "chưa viết".
 | 02  | [Redis core](./02-redis-core/) - data types, persistence, eviction, Lua, pipelining            | đã xong    |
 | 03  | [Redis messaging](./03-redis-messaging/) - Pub/Sub, List, Streams, consumer group              | đã xong    |
 | 04  | [Redis nâng cao](./04-redis-advanced/) - replication, Sentinel, Cluster, hot key, big key      | đã xong    |
-| 05  | [RabbitMQ](./05-rabbitmq/) - exchange, ack, prefetch, DLX, quorum queue                        | chưa viết  |
-| 06  | [Kafka](./06-kafka/) - log, partition, consumer group, offset, transaction                     | chưa viết  |
-| 07  | [NATS JetStream](./07-nats-jetstream/) - core NATS, stream, durable consumer                   | chưa viết  |
+| 05  | [RabbitMQ](./05-rabbitmq/) - exchange, ack, prefetch, DLX, quorum queue                        | đã xong    |
+| 06  | [Kafka](./06-kafka/) - log, partition, consumer group, offset, transaction                     | đã xong    |
+| 07  | [NATS JetStream](./07-nats-jetstream/) - core NATS, stream, durable consumer                   | đã xong    |
 | 08  | [Patterns](./08-patterns/) - idempotency, retry, DLQ, outbox, saga                             | chưa viết  |
 | 09  | [Production](./09-production/) - job queue, event-driven, rate limiter, realtime               | chưa viết  |
 
@@ -31,6 +31,8 @@ Chủ đề nào chưa có thư mục thì được đánh dấu "chưa viết".
 `make lint` chạy `golangci-lint` v2.14.0 qua `go run`, và bản này tự tải toolchain Go mới hơn nếu cần (`GOTOOLCHAIN=auto`).
 Nếu đã cài sẵn `golangci-lint` trong `PATH` thì Makefile dùng bản đó.
 Sơ đồ Mermaid được kiểm tra bằng `@mermaid-js/mermaid-cli` (devDependency, tải Chrome khi `pnpm install`).
+`pnpm-workspace.yaml` có mục `allowBuilds` cho `@confluentinc/kafka-javascript`, `esbuild` và `puppeteer`, vì pnpm mặc định không chạy script cài đặt của dependency, còn client Kafka của TypeScript cần script này chạy.
+Đừng xóa mục này khỏi file.
 
 ## Bắt đầu nhanh
 
@@ -52,7 +54,9 @@ make down
 ```
 
 Mọi port của broker chỉ bind `127.0.0.1`.
-Nếu port mặc định đã bị chiếm, đổi port phía host rồi trỏ biến môi trường của lab tới port mới, ví dụ:
+Nếu port mặc định đã bị chiếm, đổi port phía host rồi trỏ biến môi trường của lab tới port mới.
+Các biến đổi port của broker là `REDIS_PORT`, `AMQP_PORT`, `RABBITMQ_MANAGEMENT_PORT`, `KAFKA_PORT`, `NATS_PORT` và `POSTGRES_PORT`.
+Ví dụ:
 
 ```bash
 REDIS_PORT=6390 KAFKA_PORT=9094 POSTGRES_PORT=5433 make up

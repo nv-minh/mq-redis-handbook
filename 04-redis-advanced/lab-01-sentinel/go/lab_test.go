@@ -120,13 +120,17 @@ func TestChaosClientWritesSucceedWithin30sAfterMasterIsStopped(t *testing.T) {
 	registerRestore(t, &restore)
 
 	client := ConnectViaSentinel()
-	defer func() { _ = client.Close() }()
 	key := testkit.UniqueName("lab04-sentinel-chaos")
+	// Cleanups run last in, first out: delete the key (the failover client finds the current master),
+	// then close the client, then the restore registered above brings the stopped node back.
+	// Close must be a cleanup too: a defer would close the client BEFORE the key is deleted.
+	t.Cleanup(func() { _ = client.Close() })
 	t.Cleanup(func() {
-		// Registered after the restore cleanup, so it runs first; the failover client finds the master.
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		client.Del(cctx, key)
+		if err := client.Del(cctx, key).Err(); err != nil {
+			t.Errorf("delete %s: %v", key, err)
+		}
 	})
 	if err := client.Set(ctx, key, "before", 0).Err(); err != nil {
 		t.Fatalf("set before: %v", err)

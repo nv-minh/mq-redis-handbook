@@ -114,6 +114,9 @@ describe("chaos", () => {
     // commandTimeout keeps one attempt from hanging in ioredis' offline queue past the budget.
     const client = connectViaSentinel({ commandTimeout: 2_000 });
     clients.push(client);
+    // Connection errors during the failover are expected: count them instead of letting ioredis log each one.
+    let connectionErrors = 0;
+    client.on("error", () => (connectionErrors += 1));
     const key = uniqueName("lab04-sentinel-chaos");
     keys.push(key);
     await client.set(key, "before");
@@ -132,7 +135,7 @@ describe("chaos", () => {
     );
     const elapsedMs = Date.now() - stoppedAt;
     console.log(
-      `failover measured: first successful write ${elapsedMs} ms after the master stopped`,
+      `failover measured: first successful write ${elapsedMs} ms after the master stopped (${connectionErrors} connection errors seen by the client)`,
     );
     expect(elapsedMs).toBeLessThan(30_000);
 

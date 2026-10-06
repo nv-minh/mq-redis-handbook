@@ -16,8 +16,12 @@ const hint = `Redis Sentinel is not up. Start both topologies with: make up PROF
 // requireSentinelProfile fails fast with a clear message when the sentinel profile is not running.
 func requireSentinelProfile(t *testing.T) {
 	t.Helper()
-	// t.Log output is printed when the test fails, so the hint accompanies WaitForPort's error.
-	t.Log(hint)
+	// The hint is printed only when the test fails, next to WaitForPort's error.
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Log(hint)
+		}
+	})
 	for _, addr := range []string{"127.0.0.1:26379", "127.0.0.1:26380", "127.0.0.1:26381", "127.0.0.1:6380", "127.0.0.1:6381", "127.0.0.1:6382"} {
 		testkit.WaitForPort(t, addr, 3*time.Second)
 	}

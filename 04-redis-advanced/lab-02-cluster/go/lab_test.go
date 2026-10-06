@@ -17,8 +17,12 @@ const hint = `Redis Cluster is not up. Start both topologies with: make up PROFI
 // requireClusterProfile fails fast with a clear message when the cluster profile is not running.
 func requireClusterProfile(t *testing.T) {
 	t.Helper()
-	// t.Log output is printed when the test fails, so the hint accompanies WaitForPort's error.
-	t.Log(hint)
+	// The hint is printed only when the test fails, next to WaitForPort's error.
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Log(hint)
+		}
+	})
 	for _, port := range ClusterPorts {
 		testkit.WaitForPort(t, fmt.Sprintf("127.0.0.1:%d", port), 3*time.Second)
 	}

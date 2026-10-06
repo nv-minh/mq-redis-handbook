@@ -13,6 +13,7 @@ const show = async (label: string): Promise<void> => {
 };
 
 const client = connectViaSentinel({ commandTimeout: 2_000 });
+client.on("error", () => undefined); // connection errors during the failover are expected
 const key = uniqueName("demo:sentinel");
 let stopped: string | undefined;
 

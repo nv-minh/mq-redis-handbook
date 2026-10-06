@@ -114,7 +114,7 @@ func run() (err error) {
 	}
 	dead, ok, err := check.Get(queues.Dlq, true)
 	if err != nil || !ok {
-		return fmt.Errorf("Get từ DLQ = %v, %v", ok, err)
+		return fmt.Errorf("lấy message từ DLQ thất bại (có message=%v, lỗi=%v)", ok, err)
 	}
 	logf("DLQ nhận %s", dead.Body)
 	fmt.Printf("x-failure-reason: %v\n", dead.Headers["x-failure-reason"])

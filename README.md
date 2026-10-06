@@ -23,7 +23,7 @@ Chủ đề nào chưa có thư mục thì được đánh dấu "chưa viết".
 
 ## Yêu cầu
 
-- Node 22 và pnpm.
+- Node 22 và pnpm 11 (CI dùng `11.13.1`, lockfile và `pnpm-workspace.yaml` được tạo bằng bản này).
 - Go 1.26 trở lên (`go.mod` dùng directive `go 1.26.0`, vì `go-redis` v9.23.0 yêu cầu Go >= 1.26).
   Nếu Go cài sẵn cũ hơn, `GOTOOLCHAIN=auto` (mặc định) tự tải toolchain 1.26 lần chạy đầu.
 - Docker với Compose v2 (image đều multi-arch: Apple Silicon arm64 và amd64).
@@ -31,7 +31,13 @@ Chủ đề nào chưa có thư mục thì được đánh dấu "chưa viết".
 `make lint` chạy `golangci-lint` v2.14.0 qua `go run`, và bản này tự tải toolchain Go mới hơn nếu cần (`GOTOOLCHAIN=auto`).
 Nếu đã cài sẵn `golangci-lint` trong `PATH` thì Makefile dùng bản đó.
 Sơ đồ Mermaid được kiểm tra bằng `@mermaid-js/mermaid-cli` (devDependency, tải Chrome khi `pnpm install`).
-`pnpm-workspace.yaml` có mục `allowBuilds` cho `@confluentinc/kafka-javascript`, `esbuild` và `puppeteer`, vì pnpm mặc định không chạy script cài đặt của dependency, còn client Kafka của TypeScript cần script này chạy.
+`pnpm-workspace.yaml` có mục `allowBuilds` (cú pháp của pnpm 11), vì pnpm mặc định không chạy script cài đặt của dependency.
+Mỗi package trong mục này cần script cài đặt của nó chạy:
+
+- `@confluentinc/kafka-javascript` chạy `node-pre-gyp install` để có binary native cho client Kafka của TypeScript.
+- `esbuild` chạy script `postinstall` của nó, và `vite` (dùng bởi `vitest`) phụ thuộc vào `esbuild`.
+- `puppeteer` chạy script `postinstall` của nó, tải Chrome cho `mmdc` kiểm tra Mermaid.
+
 Đừng xóa mục này khỏi file.
 
 ## Bắt đầu nhanh
@@ -56,6 +62,7 @@ make down
 Mọi port của broker chỉ bind `127.0.0.1`.
 Nếu port mặc định đã bị chiếm, đổi port phía host rồi trỏ biến môi trường của lab tới port mới.
 Các biến đổi port của broker là `REDIS_PORT`, `AMQP_PORT`, `RABBITMQ_MANAGEMENT_PORT`, `KAFKA_PORT`, `NATS_PORT` và `POSTGRES_PORT`.
+Port của profile `sentinel` (6380 đến 6382 cho Redis, 26379 đến 26381 cho Sentinel) và profile `cluster` (7001 đến 7006) được cố định trong compose, không đổi được bằng biến môi trường.
 Ví dụ:
 
 ```bash
@@ -92,7 +99,9 @@ Các lab ở chủ đề 04 làm sẵn phần này.
 ## CI
 
 Workflow `.github/workflows/ci.yml` chạy khi push lên `main` và với mỗi pull request.
-Các job chạy song song, mỗi job tự dựng broker bằng `make up` (không dùng service container riêng), nên môi trường giống lúc chạy local.
+Các job chạy song song.
+Các job test tự dựng broker bằng `make up` (không dùng service container riêng), nên môi trường giống lúc chạy local.
+Job `lint` không cần broker, chỉ `check-compose` hỏi registry xem image có đủ kiến trúc.
 
 | Job          | Làm gì                                                                                                                   | Chạy local bằng                                         |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------- |

@@ -90,14 +90,14 @@ Vì vậy đừng assert phân phối đều cho key null (lab 01 chỉ assert r
 
 Partitioner mặc định của mỗi client khác nhau, và đây là nguồn lỗi hay gặp khi trộn nhiều ngôn ngữ trên một topic:
 
-| Client                                            | Hash cho key          | Key null                                                           |
-| ------------------------------------------------- | --------------------- | ------------------------------------------------------------------ |
-| Java client 4.x                                   | murmur2               | sticky, đổi partition sau khoảng `batch.size` byte                 |
-| librdkafka thuần                                  | CRC32 (`consistent_random`) | ngẫu nhiên                                                   |
-| `@confluentinc/kafka-javascript` (API KafkaJS)    | murmur2 (`murmur2_random`, wrapper tự đặt) | ngẫu nhiên, kèm sticky theo `sticky.partitioning.linger.ms` |
-| `kafka-go` `Writer` không đặt `Balancer`          | không hash, round-robin | round-robin                                                      |
-| `kafka-go` với `&kafka.Murmur2Balancer{}`         | murmur2               | ngẫu nhiên                                                         |
-| `kafka-go` với `&kafka.Hash{}`                    | FNV-1a                | round-robin                                                        |
+| Client                                         | Hash cho key                               | Key null                                                    |
+| ---------------------------------------------- | ------------------------------------------ | ----------------------------------------------------------- |
+| Java client 4.x                                | murmur2                                    | sticky, đổi partition sau khoảng `batch.size` byte          |
+| librdkafka thuần                               | CRC32 (`consistent_random`)                | ngẫu nhiên                                                  |
+| `@confluentinc/kafka-javascript` (API KafkaJS) | murmur2 (`murmur2_random`, wrapper tự đặt) | ngẫu nhiên, kèm sticky theo `sticky.partitioning.linger.ms` |
+| `kafka-go` `Writer` không đặt `Balancer`       | không hash, round-robin                    | round-robin                                                 |
+| `kafka-go` với `&kafka.Murmur2Balancer{}`      | murmur2                                    | ngẫu nhiên                                                  |
+| `kafka-go` với `&kafka.Hash{}`                 | FNV-1a                                     | round-robin                                                 |
 
 Bẫy của kafka-go: `Writer` mặc định round-robin, nên message có key cũng KHÔNG nằm cùng partition nếu không đặt `Balancer` tường minh.
 Lab 01 chứng minh điều này (test chỉ có ở Go): sáu message cùng key đi qua cả ba partition.
@@ -164,11 +164,11 @@ Rời group có chủ đích (`disconnect`, `close`) gửi `LeaveGroup`, nên re
 
 Giá trị mặc định khác nhau giữa các client:
 
-| Client                          | `session.timeout.ms`                  | `heartbeat.interval.ms` |
-| ------------------------------- | ------------------------------------- | ----------------------- |
-| Java client                     | 45000 (KIP-735, tăng từ 10000)        | 3000                    |
-| wrapper kafka-javascript        | 30000 (librdkafka thuần là 45000)     | 3000                    |
-| kafka-go                        | 30000                                 | 3000                    |
+| Client                   | `session.timeout.ms`              | `heartbeat.interval.ms` |
+| ------------------------ | --------------------------------- | ----------------------- |
+| Java client              | 45000 (KIP-735, tăng từ 10000)    | 3000                    |
+| wrapper kafka-javascript | 30000 (librdkafka thuần là 45000) | 3000                    |
+| kafka-go                 | 30000                             | 3000                    |
 
 Broker trong compose đặt `group.initial.rebalance.delay.ms=0`, còn mặc định là 3000 ms (group mới chờ thêm consumer vào trước lần rebalance đầu).
 Lab 02 không chờ timeout (chưa xác minh bằng đo thực tế thời gian phát hiện member chết): test dùng rời group có chủ đích.
@@ -263,17 +263,17 @@ Với kafka-go khi dùng `GroupID`, `Reader.Lag()` luôn trả -1 nên phải t�
 
 ## So sánh RabbitMQ và Kafka
 
-| Tiêu chí                  | RabbitMQ (chương 05)                                           | Kafka                                                                 |
-| ------------------------- | -------------------------------------------------------------- | --------------------------------------------------------------------- |
-| Mô hình                   | Queue: message được giao rồi xóa sau ack                       | Log: message ở lại tới hết retention, consumer giữ offset             |
-| Ai theo dõi tiến độ đọc   | Broker (ack, requeue theo từng message)                        | Consumer (offset commit theo partition)                               |
-| Đọc lại                   | Không đọc lại message đã ack                                   | Đọc lại bằng cách tua offset hoặc dùng group mới (lab 03)             |
-| Routing                   | Exchange và binding (direct, topic, fanout, headers)           | Topic và key hash vào partition                                       |
-| Thứ tự                    | Trong một queue với một consumer, requeue làm đổi thứ tự        | Trong một partition                                                   |
-| Mở rộng đọc               | Nhiều consumer trên một queue (competing consumers)            | Nhiều consumer trong group, tối đa bằng số partition                  |
-| Retry và dead letter      | DLX, TTL, delivery limit có sẵn                                | Không có sẵn: tự dựng topic retry và dead letter                      |
-| Đảm bảo giao              | At-least-once với ack, publisher confirms                      | At-least-once mặc định, exactly-once chỉ trong Kafka                  |
-| Khi chọn                  | Task queue, routing linh hoạt, retry và delay                  | Event stream, replay, nhiều consumer độc lập, thông lượng lớn         |
+| Tiêu chí                | RabbitMQ (chương 05)                                     | Kafka                                                         |
+| ----------------------- | -------------------------------------------------------- | ------------------------------------------------------------- |
+| Mô hình                 | Queue: message được giao rồi xóa sau ack                 | Log: message ở lại tới hết retention, consumer giữ offset     |
+| Ai theo dõi tiến độ đọc | Broker (ack, requeue theo từng message)                  | Consumer (offset commit theo partition)                       |
+| Đọc lại                 | Không đọc lại message đã ack                             | Đọc lại bằng cách tua offset hoặc dùng group mới (lab 03)     |
+| Routing                 | Exchange và binding (direct, topic, fanout, headers)     | Topic và key hash vào partition                               |
+| Thứ tự                  | Trong một queue với một consumer, requeue làm đổi thứ tự | Trong một partition                                           |
+| Mở rộng đọc             | Nhiều consumer trên một queue (competing consumers)      | Nhiều consumer trong group, tối đa bằng số partition          |
+| Retry và dead letter    | DLX, TTL, delivery limit có sẵn                          | Không có sẵn: tự dựng topic retry và dead letter              |
+| Đảm bảo giao            | At-least-once với ack, publisher confirms                | At-least-once mặc định, exactly-once chỉ trong Kafka          |
+| Khi chọn                | Task queue, routing linh hoạt, retry và delay            | Event stream, replay, nhiều consumer độc lập, thông lượng lớn |
 
 Chọn dựa trên mô hình, không phải "cái nào nhanh hơn": cần xử lý một việc đúng một lần bởi một worker và retry tinh vi thì queue hợp hơn, cần giữ lịch sử event cho nhiều bên đọc độc lập và đọc lại thì log hợp hơn.
 

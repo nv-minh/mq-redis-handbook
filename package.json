@@ -17,6 +17,7 @@
     "@eslint/js": "^10.0.1",
     "@mermaid-js/mermaid-cli": "12.0.0",
     "@types/node": "^22.20.5",
+    "@types/pg": "8.23.1",
     "@typescript/native": "npm:typescript@7.0.2",
     "eslint": "10.12.0",
     "eslint-config-prettier": "^10.1.8",
@@ -32,6 +33,7 @@
     "@nats-io/jetstream": "3.4.0",
     "@nats-io/transport-node": "3.4.0",
     "amqplib": "2.2.0",
-    "ioredis": "6.0.0"
+    "ioredis": "6.0.0",
+    "pg": "8.23.1"
   }
 }

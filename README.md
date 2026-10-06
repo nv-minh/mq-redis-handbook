@@ -11,10 +11,10 @@ Chủ đề nào chưa có thư mục thì được đánh dấu "chưa viết".
 
 | #   | Chủ đề                                                                                         | Trạng thái |
 | --- | ---------------------------------------------------------------------------------------------- | ---------- |
-| 01  | [Fundamentals](./01-fundamentals/) - vì sao cần MQ, delivery semantics, ordering, backpressure | chưa viết  |
-| 02  | [Redis core](./02-redis-core/) - data types, persistence, eviction, Lua, pipelining            | chưa viết  |
-| 03  | [Redis messaging](./03-redis-messaging/) - Pub/Sub, List, Streams, consumer group              | chưa viết  |
-| 04  | [Redis nâng cao](./04-redis-advanced/) - replication, Sentinel, Cluster, hot key, big key      | chưa viết  |
+| 01  | [Fundamentals](./01-fundamentals/) - vì sao cần MQ, delivery semantics, ordering, backpressure | đã xong    |
+| 02  | [Redis core](./02-redis-core/) - data types, persistence, eviction, Lua, pipelining            | đã xong    |
+| 03  | [Redis messaging](./03-redis-messaging/) - Pub/Sub, List, Streams, consumer group              | đã xong    |
+| 04  | [Redis nâng cao](./04-redis-advanced/) - replication, Sentinel, Cluster, hot key, big key      | đã xong    |
 | 05  | [RabbitMQ](./05-rabbitmq/) - exchange, ack, prefetch, DLX, quorum queue                        | chưa viết  |
 | 06  | [Kafka](./06-kafka/) - log, partition, consumer group, offset, transaction                     | chưa viết  |
 | 07  | [NATS JetStream](./07-nats-jetstream/) - core NATS, stream, durable consumer                   | chưa viết  |
@@ -42,9 +42,12 @@ make up PROFILE=cluster      # thêm Redis Cluster (6 node, tự khởi tạo)
 make up PROFILE="sentinel cluster" # cả hai topology cùng lúc (test chủ đề 04 cần cả hai)
 make lab-ts LAB=<NN-ten/lab-NN-ten>
 make lab-go LAB=<NN-ten/lab-NN-ten>
-make test                    # test script, TS và Go
+make test                    # test script, TS và Go (chủ đề 04 cần PROFILE="sentinel cluster")
+make test-fast               # mọi test trừ lab sentinel và cluster, chỉ cần make up thường
+make test-chaos              # chỉ lab sentinel và cluster (có test chaos), cần PROFILE="sentinel cluster"
 make lint
 make docs-check
+make mermaid-check           # mọi khối mermaid phải parse được (mmdc)
 make down
 ```
 
@@ -81,3 +84,24 @@ Mọi lab dùng chung helper, không dùng `sleep` cố định.
 Các node trong profile `sentinel` và `cluster` tự giới thiệu bằng tên Docker DNS (ví dụ `redis-master:6380`, `redis-cluster-1:7001`), vì các node phải gọi được nhau bên trong network của Docker.
 Client chạy trên máy host cần ánh xạ các tên này về `127.0.0.1` với cùng port (`natMap` của ioredis, `Dialer` của go-redis).
 Các lab ở chủ đề 04 làm sẵn phần này.
+
+## CI
+
+Workflow `.github/workflows/ci.yml` chạy khi push lên `main` và với mỗi pull request.
+Các job chạy song song, mỗi job tự dựng broker bằng `make up` (không dùng service container riêng), nên môi trường giống lúc chạy local.
+
+| Job          | Làm gì                                                                                                                   | Chạy local bằng                                         |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------- |
+| `lint`       | eslint, prettier, tsc, `golangci-lint`, cổng no-sleep, `check-compose` (strict), kiểm tra tài liệu, mermaid, test script | `make lint docs-check mermaid-check test-scripts`       |
+| `test-ts`    | `make up`, rồi vitest cho mọi lab trừ sentinel và cluster                                                                | `make up && make test-fast-ts`                          |
+| `test-go`    | `make up`, rồi `go test -p 1` cho mọi lab trừ sentinel và cluster                                                        | `make up && make test-fast-go`                          |
+| `test-chaos` | `make up PROFILE="sentinel cluster"`, rồi test của lab sentinel và cluster, gồm test chaos (mỗi bước tối đa 10 phút)     | `make up PROFILE="sentinel cluster" && make test-chaos` |
+
+Test chaos nằm trong hai lab của chủ đề 04 (`describe("chaos")` trong TypeScript, `TestChaos*` trong Go).
+Chúng dừng và khởi động lại container Redis nên tách thành job riêng, không có `continue-on-error`.
+Hai lab này cần cả hai profile, vì vậy `make test-fast` bỏ qua cả hai lab chứ không chỉ riêng test chaos.
+
+Trên CI, `check-compose` chạy với `CHECK_COMPOSE_STRICT=1`: gặp rate limit của Docker Hub là lỗi.
+Nếu cần, thêm secret `DOCKERHUB_USERNAME` và `DOCKERHUB_TOKEN` của repo, job `lint` sẽ tự `docker login` (bước này bị bỏ qua khi thiếu secret).
+`mmdc` trên runner ubuntu cần Chromium chạy với `--no-sandbox`: workflow tạo file cấu hình puppeteer và trỏ biến `MERMAID_PUPPETEER_CONFIG` tới nó.
+Local không cần biến này, dùng Chromium do `pnpm install` tải.

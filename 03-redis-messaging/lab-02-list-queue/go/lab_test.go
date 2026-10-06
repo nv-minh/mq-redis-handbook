@@ -160,7 +160,7 @@ func TestMessageIsRecoveredAfterConsumerCrash(t *testing.T) {
 		t.Fatalf("Dequeue = %q, mong đợi job-1", got)
 	}
 	_ = crashingConn.Close()
-	assertList(t, "processing of worker-a", e.list(survivor.ProcessingKey("worker-a")), []string{"job-1"})
+	assertList(t, "processing của worker-a", e.list(survivor.ProcessingKey("worker-a")), []string{"job-1"})
 	assertList(t, "queue", e.list(queueKey), []string{})
 
 	// Một lượt recovery đưa message của consumer đã chết về lại queue.
@@ -168,7 +168,7 @@ func TestMessageIsRecoveredAfterConsumerCrash(t *testing.T) {
 	if err != nil || recovered != 1 {
 		t.Fatalf("RecoverStale = %d, %v; mong đợi 1", recovered, err)
 	}
-	assertList(t, "processing of worker-a", e.list(survivor.ProcessingKey("worker-a")), []string{})
+	assertList(t, "processing của worker-a", e.list(survivor.ProcessingKey("worker-a")), []string{})
 
 	// Một consumer khác giờ nhận đúng message đó: at-least-once delivery.
 	if got := mustDequeue(t, survivor, "worker-b"); got != "job-1" {
@@ -179,7 +179,7 @@ func TestMessageIsRecoveredAfterConsumerCrash(t *testing.T) {
 		t.Fatalf("Ack = %v, %v; mong đợi true", acked, err)
 	}
 	assertList(t, "queue", e.list(queueKey), []string{})
-	assertList(t, "processing of worker-b", e.list(survivor.ProcessingKey("worker-b")), []string{})
+	assertList(t, "processing của worker-b", e.list(survivor.ProcessingKey("worker-b")), []string{})
 }
 
 func TestDequeueOnEmptyQueueReturnsNilAfterTheBlockTimeout(t *testing.T) {

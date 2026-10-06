@@ -15,18 +15,15 @@ Lý thuyết nằm ở [theory.md](../theory.md).
 
 ```mermaid
 flowchart LR
-    subgraph Sequential["100 lệnh tuần tự: 100 round trip"]
+    subgraph Sequential["Tuần tự: 100 round trip"]
         direction LR
-        S1[client] -->|SET 1| R1[(Redis)]
-        R1 -->|OK| S1
-        S1 -->|SET 2 ... SET 100| R1
+        C1[client] -->|"1 lệnh, chờ reply, lặp 100 lần"| R1[("Redis")]
     end
-    subgraph Pipelined["1 pipeline: 1 round trip"]
+    subgraph Pipelined["Pipeline: 1 round trip"]
         direction LR
-        P1[client] -->|"1 lần ghi: SET 1 ... SET 100"| R2[(Redis)]
-        R2 -->|"100 reply"| P1
+        C2[client] -->|"1 lần ghi chứa 100 lệnh"| R2[("Redis")]
+        R2 -.->|"100 reply"| C2
     end
-    Sequential ~~~ Pipelined
 ```
 
 Đường lỗi: đọc rồi quyết định ở phía client thì hai caller cùng thấy `1` và cùng giảm, counter xuống `-1`.

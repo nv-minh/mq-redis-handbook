@@ -60,6 +60,10 @@ Các điểm lab đo được:
 
 Cách chuẩn khi effect nằm trong database là ghi dedup marker và side effect trong cùng một transaction (inbox pattern, bạn đồng hành phía consumer của outbox) và dùng unique constraint làm trọng tài cho bản trùng đồng thời.
 Trên cache phải dùng atomic set-if-absent thay vì check rồi set riêng.
+Dedup key bằng Redis chỉ bền bằng độ bền của Redis.
+Key có thể mất khi Redis restart mà không bật persistence (suy luận, chưa xác minh bằng nguồn riêng), khi chỉ có RDB hoặc AOF `everysec` (tài liệu Redis ghi có thể mất vài phút hoặc khoảng 1 giây dữ liệu gần nhất), khi bị eviction dưới `maxmemory` (mọi `maxmemory-policy` khác `noeviction` có thể xóa key), và khi failover vì replication là bất đồng bộ nên một ghi đã ack vẫn có thể mất.
+Key mất thì bản trùng đến sau đó được áp dụng lại, nên với effect quan trọng hãy đặt dedup marker trong database cùng transaction với effect.
+
 Nên ưu tiên operation idempotent tự nhiên (upsert theo business key, ghi giá trị tuyệt đối thay vì tăng) trước khi dùng dedup.
 
 ## Retry với exponential backoff và jitter
@@ -120,7 +124,8 @@ Lab 05 ([thư mục](./lab-05-outbox/)) cài polling relay trên Postgres và Ra
 - Publish lỗi ở một dòng thì cả batch rollback và lỗi được ném ra, những dòng đã publish trước đó sẽ được publish lại.
   Đổi lại transaction và lock mở suốt thời gian publish (đánh đổi suy luận từ code, kèm hai thiết kế thay thế là claim column và CDC trong README của lab).
 
-Thứ tự: thứ tự publish theo thứ tự service gửi (microservices.io), và một relay duy nhất giữ thứ tự chèn.
+Thứ tự: thứ tự publish theo thứ tự service gửi (microservices.io), và một relay duy nhất publish theo thứ tự id.
+Thứ tự id chỉ trùng thứ tự chèn khi các transaction commit theo đúng thứ tự id: `bigserial` cấp id lúc INSERT nhưng dòng chỉ hiện ra lúc COMMIT, nên ngay cả một relay vẫn có thể publish id nhỏ sau id lớn khi hai transaction commit đảo thứ tự.
 Nghiên cứu của handbook ghi "với nhiều relay chạy song song thì thứ tự bị mất" là chưa xác minh bằng nguồn riêng.
 Lab 05 đo nó: relay A khóa dòng 1 và 2 rồi đứng chờ, relay B publish dòng 3 và 4 trước vì `SKIP LOCKED` bỏ qua dòng đang bị khóa, nên thứ tự publish là 3, 4, 1, 2.
 Kết luận chỉ áp dụng cho thiết kế này: muốn giữ thứ tự theo entity thì dùng một relay hoặc claim theo aggregate.

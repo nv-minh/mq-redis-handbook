@@ -102,6 +102,10 @@ Các giới hạn khác:
   Cách sửa là lưu token ngẫu nhiên làm value và nhả bằng Lua hoặc `DELEX key IFEQ token` (Redis 8.4 trở lên).
 - Dedup bằng Redis không bảo vệ được side effect ở hệ thống ngoài: nếu process chết giữa chừng và key hết hạn trước khi broker giao lại, effect có thể chạy lần hai.
   Hãy truyền idempotency key xuống các service gọi tiếp.
+- Dedup key nằm trong Redis nên nó chỉ bền bằng độ bền của Redis.
+  Key có thể mất khi Redis restart mà không bật persistence (suy luận từ cách Redis lưu dữ liệu trong bộ nhớ, chưa xác minh bằng nguồn riêng), khi chỉ có RDB (docs ghi có thể mất vài phút dữ liệu gần nhất nếu crash) hoặc AOF `everysec` (có thể mất khoảng 1 giây), khi bị eviction dưới `maxmemory` (mọi `maxmemory-policy` khác `noeviction` có thể xóa key, kể cả `volatile-*` vì dedup key có TTL), và khi failover vì replication của Redis là bất đồng bộ nên một ghi đã được ack vẫn có thể mất.
+  Key mất đi thì bản trùng đến sau đó được áp dụng lại, tức là effect bị lặp.
+  Muốn chắc chắn hơn: bật AOF, dùng `noeviction` cho Redis chứa dedup key, hoặc đặt dedup marker trong database cùng transaction với effect.
 - Ưu tiên operation idempotent tự nhiên (upsert theo business key, ghi giá trị tuyệt đối thay vì tăng) trước khi dùng dedup.
 
 ## Chạy

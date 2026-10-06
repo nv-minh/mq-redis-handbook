@@ -114,7 +114,9 @@ Hai thiết kế thay thế (đều là suy luận thiết kế, không nằm tr
   Lab này không dùng CDC.
 
 Thứ tự.
-Một relay duy nhất publish theo thứ tự id, tức là theo thứ tự chèn: test `relay_publishes_each_row_and_marks_it_published` kiểm tra consumer nhận đúng thứ tự đó.
+Một relay duy nhất publish theo thứ tự id, và thứ tự id trùng thứ tự chèn khi các transaction commit theo đúng thứ tự id: test `relay_publishes_each_row_and_marks_it_published` kiểm tra consumer nhận đúng thứ tự đó trong trường hợp này.
+Giới hạn: `bigserial` cấp id lúc INSERT nhưng dòng chỉ hiện ra lúc COMMIT, nên nếu hai transaction commit đảo thứ tự thì ngay cả một relay vẫn có thể publish id nhỏ sau id lớn.
+Lab không đo trường hợp này, đó là suy luận từ cách `bigserial` và transaction hoạt động.
 Với nhiều relay chạy song song, research ghi "thứ tự bị mất trừ khi chỉ có một relay hoặc claim theo aggregate" là chưa xác minh bằng nguồn riêng.
 Lab này đo nó bằng test `several_relays_with_skip_locked_do_not_preserve_insertion_order` và kết quả xác nhận suy luận đó cho thiết kế này.
 Relay A khóa dòng 1 và 2 rồi đứng chờ ở event đầu, relay B chạy trọn vẹn trong lúc đó: `SKIP LOCKED` bỏ qua dòng 1 và 2 nên B publish dòng 3 và 4 trước.
@@ -144,7 +146,7 @@ Khi relay con chết, connection đóng, Postgres rollback và nhả lock; trong
 - At-least-once, không phải exactly-once: event có thể được publish nhiều lần, consumer phải idempotent.
 - Outbox chuyển độ trễ vào polling: event chỉ đi khi relay chạy, và lab không có vòng lặp polling định kỳ (caller gọi `runRelay`).
 - Giữ transaction mở khi publish (đã nêu ở trên) giới hạn throughput và số relay có ích.
-- Nhiều relay không giữ thứ tự chèn (đã đo ở trên).
+- Nhiều relay không giữ thứ tự chèn (đã đo ở trên), và một relay chỉ giữ thứ tự khi commit theo đúng thứ tự id.
 - Bảng `outbox` lớn dần: lab không có job dọn dòng đã publish.
   Partial index giữ truy vấn của relay nhanh, nhưng bảng vẫn cần được dọn hoặc partition.
 - Consumer in-memory của test không sống qua restart: dedupe production phải bền vững.
@@ -159,7 +161,7 @@ Go: test chạy lại chính test binary (`os.Args[0]` với `-test.run=^TestHel
 `TestHelperProcess` tự bỏ qua khi không có biến môi trường đó.
 
 Chống process mồ côi: `afterEach` (TypeScript) hoặc `t.Cleanup` (Go) luôn `SIGKILL` và chờ child thoát kể cả khi test fail, và child có thời hạn cứng 60 giây tự thoát.
-Stderr của child được ghi lại và in ra khi test fail.
+Stderr của child được ghi lại và in ra khi test fail, và nếu child thoát trước khi báo marker (ví dụ lỗi lúc khởi động) thì test fail ngay thay vì chờ hết thời gian chờ marker.
 Thứ tự dọn có chủ đích: child chết trước (nhả lock), rồi pool đóng, rồi mới `DROP SCHEMA`.
 Kiểm tra sau khi chạy: `pgrep -fl "chaos-worker|TestHelperProcess"` không in gì.
 

@@ -23,20 +23,20 @@ func newClient(t *testing.T) *redis.Client {
 	t.Helper()
 	opts, err := redis.ParseURL(redisURL())
 	if err != nil {
-		t.Fatalf("parse REDIS_URL: %v", err)
+		t.Fatalf("REDIS_URL không hợp lệ: %v", err)
 	}
 	rdb := redis.NewClient(opts)
 	t.Cleanup(func() { _ = rdb.Close() })
 	return rdb
 }
 
-// newSubscriber subscribes on its own connection (go-redis gives every PubSub a dedicated
-// one) and closes it when the test ends.
+// newSubscriber subscribe trên connection riêng của nó (go-redis cấp cho mỗi PubSub một
+// connection riêng) và đóng nó khi test kết thúc.
 func newSubscriber(t *testing.T, rdb *redis.Client, channel string) *Subscription {
 	t.Helper()
 	sub, err := Subscribe(context.Background(), rdb, channel)
 	if err != nil {
-		t.Fatalf("Subscribe: %v", err)
+		t.Fatalf("Subscribe lỗi: %v", err)
 	}
 	t.Cleanup(func() { _ = sub.Close() })
 	return sub
@@ -46,7 +46,7 @@ func mustPublish(t *testing.T, rdb *redis.Client, channel, message string) int64
 	t.Helper()
 	receivers, err := Publish(context.Background(), rdb, channel, message)
 	if err != nil {
-		t.Fatalf("Publish %q: %v", message, err)
+		t.Fatalf("Publish %q lỗi: %v", message, err)
 	}
 	return receivers
 }
@@ -71,29 +71,29 @@ func TestSubscriberMissesMessagesPublishedWhileOffline(t *testing.T) {
 	rdb := newClient(t)
 	channel := testkit.UniqueName("lab03-offline")
 
-	// Nobody is subscribed: PUBLISH replies with the number of receivers, which is 0,
-	// and Redis does not keep the message anywhere.
+	// Chưa ai subscribe: PUBLISH trả về số receiver, tức là 0,
+	// và Redis không giữ message ở đâu cả.
 	for i := 1; i <= 3; i++ {
 		if got := mustPublish(t, rdb, channel, fmt.Sprintf("offline-%d", i)); got != 0 {
-			t.Fatalf("PUBLISH with no subscriber replied %d, want 0", got)
+			t.Fatalf("PUBLISH khi chưa có subscriber trả về %d, mong đợi 0", got)
 		}
 	}
 
 	sub := newSubscriber(t, rdb, channel)
-	// The subscribe confirmation is already in, and the server agrees: one subscriber.
+	// Xác nhận subscribe đã về, và server cũng đồng ý: có một subscriber.
 	waitForSubscribers(t, rdb, channel, 1)
 
-	// Now there is exactly one receiver, so this one is delivered.
+	// Giờ có đúng một receiver, nên message này được giao.
 	if got := mustPublish(t, rdb, channel, "online-1"); got != 1 {
-		t.Fatalf("PUBLISH with one subscriber replied %d, want 1", got)
+		t.Fatalf("PUBLISH khi có một subscriber trả về %d, mong đợi 1", got)
 	}
 	got := waitForMessages(t, sub, 1)
 
-	// The three old messages never arrive: Pub/Sub has no history, the late subscriber only
-	// sees what is published after it subscribed. Order on one connection means a stray old
-	// message would have arrived before "online-1".
+	// Ba message cũ không bao giờ tới: Pub/Sub không có lịch sử, subscriber vào muộn chỉ
+	// thấy những gì được publish sau khi nó subscribe. Thứ tự trên một connection nghĩa là một
+	// message cũ lạc tới sẽ đến trước "online-1".
 	if want := []string{"online-1"}; !slices.Equal(got, want) {
-		t.Fatalf("messages = %v, want %v", got, want)
+		t.Fatalf("messages = %v, mong đợi %v", got, want)
 	}
 }
 
@@ -111,17 +111,17 @@ func TestAllSubscribersReceiveEachMessage(t *testing.T) {
 	want := make([]string, total)
 	for i := range want {
 		want[i] = fmt.Sprintf("msg-%d", i)
-		// Fan-out: every PUBLISH reaches all 3 subscribers.
+		// Fan-out: mỗi PUBLISH tới cả 3 subscriber.
 		if got := mustPublish(t, rdb, channel, want[i]); got != 3 {
-			t.Fatalf("PUBLISH %q replied %d receivers, want 3", want[i], got)
+			t.Fatalf("PUBLISH %q trả về %d receiver, mong đợi 3", want[i], got)
 		}
 	}
 
 	for i, sub := range subs {
 		got := waitForMessages(t, sub, total)
-		// Each subscriber got every message, in publish order, exactly once.
+		// Mỗi subscriber nhận đủ mọi message, theo thứ tự publish, đúng một lần.
 		if !slices.Equal(got, want) {
-			t.Fatalf("subscriber %d messages = %v, want %v", i, got, want)
+			t.Fatalf("subscriber %d messages = %v, mong đợi %v", i, got, want)
 		}
 	}
 }

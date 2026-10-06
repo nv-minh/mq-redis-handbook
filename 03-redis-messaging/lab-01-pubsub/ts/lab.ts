@@ -1,24 +1,24 @@
 import type { Redis } from "ioredis";
 
 export interface Subscription {
-  /** Messages received so far, in arrival order. */
+  /** Các message đã nhận tới giờ, theo thứ tự đến. */
   messages(): string[];
-  /** Stop listening. The connection itself stays open: the caller owns it. */
+  /** Ngừng lắng nghe. Bản thân connection vẫn mở: caller sở hữu nó. */
   close(): Promise<void>;
 }
 
 /**
- * Publish `message` on `channel` and resolve with the number of subscribers that received it.
- * 0 means nobody was listening and the message is gone: Pub/Sub keeps no history.
+ * Publish `message` lên `channel` và resolve với số subscriber đã nhận được nó.
+ * 0 nghĩa là không ai đang lắng nghe và message đã mất: Pub/Sub không giữ lịch sử.
  */
 export function publish(redis: Redis, channel: string, message: string): Promise<number> {
   return redis.publish(channel, message);
 }
 
 /**
- * Number of clients subscribed to `channel` with SUBSCRIBE (PUBSUB NUMSUB). Measured against
- * ioredis 6.0.0 (RESP3, Redis 8.10.2): the reply is a flat array ["channel", 1, "other", 0] and
- * the counts are already numbers.
+ * Số client đang subscribe `channel` bằng SUBSCRIBE (PUBSUB NUMSUB). Đã đo với
+ * ioredis 6.0.0 (RESP3, Redis 8.10.2): reply là mảng phẳng ["channel", 1, "other", 0] và
+ * các số đếm đã là number sẵn.
  */
 export async function numSubscribers(redis: Redis, channel: string): Promise<number> {
   const reply = (await redis.pubsub("NUMSUB", channel)) as [string, number];
@@ -26,10 +26,10 @@ export async function numSubscribers(redis: Redis, channel: string): Promise<num
 }
 
 /**
- * Subscribe `connection` to `channel` and collect what arrives.
- * `connection` must be dedicated to subscribing: do not share it with normal commands.
- * `connection.subscribe` resolves only after Redis confirmed the subscription, so once this
- * function returns, every later PUBLISH on the channel reaches this subscriber.
+ * Cho `connection` subscribe `channel` và gom những gì tới.
+ * `connection` phải dành riêng cho việc subscribe: không dùng chung với các lệnh thường.
+ * `connection.subscribe` chỉ resolve sau khi Redis xác nhận subscription, nên khi hàm này
+ * return, mọi PUBLISH về sau trên channel đều tới được subscriber này.
  */
 export async function subscribe(connection: Redis, channel: string): Promise<Subscription> {
   const received: string[] = [];

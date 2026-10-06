@@ -4,7 +4,7 @@ import { eventually, uniqueName } from "@handbook/testkit";
 import { StreamQueue, type StreamMessage } from "./lab.js";
 
 const url = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
-// One connection for normal commands. Every consumer gets its own connection for XREADGROUP BLOCK.
+// Một connection cho các lệnh thường. Mỗi consumer có connection riêng cho XREADGROUP BLOCK.
 const redis = new Redis(url);
 const blockingConnections: Redis[] = [];
 const blockingOf = new WeakMap<StreamQueue, Redis>();
@@ -17,7 +17,7 @@ function newStreamKey(): string {
   return key;
 }
 
-/** One consumer-side object: shared commands connection, its own blocking connection. */
+/** Một đối tượng phía consumer: connection lệnh dùng chung, connection blocking riêng. */
 function newQueue(stream: string): StreamQueue {
   const blocking = new Redis(url);
   blockingConnections.push(blocking);
@@ -26,14 +26,14 @@ function newQueue(stream: string): StreamQueue {
   return queue;
 }
 
-/** Simulate a crash: the consumer vanishes without acking and its connection is dropped. */
+/** Mô phỏng crash: consumer biến mất mà không ack và connection của nó bị cắt. */
 function crash(queue: StreamQueue): void {
   blockingOf.get(queue)?.disconnect();
 }
 
 afterEach(async () => {
   for (const connection of blockingConnections.splice(0)) connection.disconnect();
-  // DEL removes the stream together with its consumer groups and their pending lists.
+  // DEL xóa stream cùng với các consumer group và pending list của chúng.
   if (streamKeys.length > 0) await redis.del(...streamKeys.splice(0));
 });
 
@@ -52,7 +52,7 @@ describe("lab-03 streams: consumer groups", () => {
     const published: string[] = [];
     for (let i = 0; i < total; i++) published.push(await c1.publish({ n: String(i) }));
 
-    // Two consumers of the same group read at the same time until everything has been delivered.
+    // Hai consumer của cùng một group đọc đồng thời cho tới khi mọi thứ đã được giao.
     const received: Record<string, string[]> = { c1: [], c2: [] };
     const readAll = async (queue: StreamQueue, name: string) => {
       while (received.c1!.length + received.c2!.length < total) {
@@ -62,13 +62,13 @@ describe("lab-03 streams: consumer groups", () => {
     };
     await Promise.all([readAll(c1, "c1"), readAll(c2, "c2")]);
 
-    // Each id was delivered exactly once, and together the consumers got every message.
+    // Mỗi id được giao đúng một lần, và gộp lại các consumer nhận đủ mọi message.
     const all = [...received.c1!, ...received.c2!];
     expect(all).toHaveLength(total);
     expect(new Set(all).size).toBe(total);
     expect([...all].sort(compareIds)).toEqual(published);
 
-    // The server agrees: the pending list holds each id once, owned by the consumer that received it.
+    // Server cũng đồng ý: pending list giữ mỗi id một lần, thuộc về consumer đã nhận nó.
     const pending = await c1.pendingEntries(group);
     expect(pending).toHaveLength(total);
     for (const entry of pending) {
@@ -86,12 +86,12 @@ describe("lab-03 streams: consumer groups", () => {
 
     const messages = await queue.consume(group, "c1", 10);
     expect(messages).toHaveLength(3);
-    // Delivered but not acked: all three sit in the pending list (PEL).
+    // Đã giao nhưng chưa ack: cả ba nằm trong pending list (PEL).
     expect(await queue.pendingCount(group)).toBe(3);
 
     expect(await queue.ack(group, messages[0]!.id)).toBe(1);
     expect(await queue.pendingCount(group)).toBe(2);
-    // Acking the same id again removes nothing.
+    // Ack lại cùng một id không xóa thêm gì.
     expect(await queue.ack(group, messages[0]!.id)).toBe(0);
     expect(await queue.pendingCount(group)).toBe(2);
 
@@ -109,13 +109,13 @@ describe("lab-03 streams: consumer groups", () => {
     await dead.createGroup(group);
     const id = await dead.publish({ job: "send-email" });
 
-    // Consumer A reads the entry and "crashes": it never acks and its connection is dropped.
+    // Consumer A đọc entry rồi "crash": nó không bao giờ ack và connection của nó bị cắt.
     const delivered = await dead.consume(group, "consumer-a", 1);
     expect(delivered.map((m) => m.id)).toEqual([id]);
     crash(dead);
 
-    // Wait (no sleep) until the entry has been idle for at least twice minIdleMs, so the claim
-    // below is far from the boundary of "idle time greater than min-idle-time".
+    // Chờ (không sleep) tới khi entry đã idle ít nhất gấp đôi minIdleMs, để lần claim
+    // bên dưới cách xa ranh giới "idle time lớn hơn min-idle-time".
     const idleBeforeClaim = await eventually(
       async () => {
         const [entry] = await rescuer.pendingEntries(group);
@@ -128,12 +128,12 @@ describe("lab-03 streams: consumer groups", () => {
     expect(claimed.messages).toEqual([{ id, fields: { job: "send-email" } }]);
     expect(claimed.deletedIds).toEqual([]);
 
-    // The entry moved to consumer B's pending list, and the claim counted as a second delivery.
+    // Entry đã chuyển sang pending list của consumer B, và lần claim được tính là lần giao thứ hai.
     const [entry] = await rescuer.pendingEntries(group);
     expect(entry).toMatchObject({ id, consumer: "consumer-b", deliveryCount: 2 });
-    expect(entry!.idleMs).toBeLessThan(idleBeforeClaim); // the claim reset the idle time
+    expect(entry!.idleMs).toBeLessThan(idleBeforeClaim); // lần claim đã đặt lại idle time
 
-    // B finishes the job.
+    // B hoàn thành công việc.
     expect(await rescuer.ack(group, id)).toBe(1);
     expect(await rescuer.pendingCount(group)).toBe(0);
   });
@@ -144,13 +144,13 @@ describe("lab-03 streams: consumer groups", () => {
     const queue = newQueue(stream);
     await queue.createGroup(group);
 
-    // Group exists but nothing was ever delivered.
+    // Group đã tồn tại nhưng chưa từng giao gì.
     expect(await queue.claimStale(group, "consumer-b", 100)).toEqual({
       messages: [],
       deletedIds: [],
     });
 
-    // Delivered and acked: the pending list is empty again.
+    // Đã giao và đã ack: pending list lại rỗng.
     const id = await queue.publish({ n: "1" });
     await queue.consume(group, "consumer-a", 1);
     await queue.ack(group, id);
@@ -168,7 +168,7 @@ describe("lab-03 streams: consumer groups", () => {
     const id = await queue.publish({ n: "1" });
     await queue.consume(group, "consumer-a", 1);
 
-    // One minute of min idle against an entry that was delivered milliseconds ago.
+    // Min idle một phút áp lên một entry vừa được giao cách đây vài mili giây.
     const claimed = await queue.claimStale(group, "consumer-b", 60_000);
     expect(claimed.messages).toEqual([]);
     const [entry] = await queue.pendingEntries(group);
@@ -183,7 +183,7 @@ describe("lab-03 streams: consumer groups", () => {
     await queue.createGroup(group);
     const id = await queue.publish({ n: "1" });
     await queue.consume(group, "consumer-a", 1);
-    // The entry leaves the stream (XDEL, or trimming) while it is still in the pending list.
+    // Entry rời khỏi stream (XDEL, hoặc trimming) trong khi vẫn còn trong pending list.
     expect(await redis.xdel(stream, id)).toBe(1);
     await eventually(
       async () => {
@@ -193,8 +193,8 @@ describe("lab-03 streams: consumer groups", () => {
       { timeoutMs: 10_000 },
     );
 
-    // Redis 7.0+: XAUTOCLAIM does not claim it, drops it from the PEL and returns its id as the
-    // third element of the reply.
+    // Redis 7.0+: XAUTOCLAIM không claim nó, loại nó khỏi PEL và trả về id của nó ở
+    // phần tử thứ ba của reply.
     const claimed = await queue.claimStale(group, "consumer-b", minIdleMs);
     expect(claimed.messages).toEqual([]);
     expect(claimed.deletedIds).toEqual([id]);
@@ -219,16 +219,16 @@ describe("lab-03 streams: consumer groups", () => {
     const group = uniqueName("workers");
     const queue = newQueue(stream);
     await queue.createGroup(group);
-    // The second XGROUP CREATE fails with BUSYGROUP on the server, and the lab swallows exactly that.
+    // XGROUP CREATE lần thứ hai bị server báo lỗi BUSYGROUP, và lab chỉ nuốt đúng lỗi đó.
     await expect(queue.createGroup(group)).resolves.toBeUndefined();
-    // Other errors are not swallowed: a group on a key of the wrong type is a WRONGTYPE error.
+    // Các lỗi khác không bị nuốt: tạo group trên key sai kiểu là lỗi WRONGTYPE.
     const notAStream = newStreamKey();
     await redis.set(notAStream, "x");
     await expect(newQueue(notAStream).createGroup(group)).rejects.toThrow(/WRONGTYPE/);
   });
 });
 
-/** Stream ids order by millisecond part, then by sequence part. */
+/** Id của stream được sắp theo phần mili giây, rồi theo phần sequence. */
 function compareIds(a: string, b: string): number {
   const [aMs, aSeq] = a.split("-").map(Number) as [number, number];
   const [bMs, bSeq] = b.split("-").map(Number) as [number, number];

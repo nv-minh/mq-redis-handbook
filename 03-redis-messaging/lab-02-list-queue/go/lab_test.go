@@ -20,17 +20,17 @@ func redisOptions(t *testing.T) *redis.Options {
 	}
 	opts, err := redis.ParseURL(url)
 	if err != nil {
-		t.Fatalf("parse REDIS_URL: %v", err)
+		t.Fatalf("REDIS_URL không hợp lệ: %v", err)
 	}
 	return opts
 }
 
-// env holds the shared commands client and a cleanup list for one test.
+// env giữ client lệnh dùng chung và danh sách cần dọn dẹp cho một test.
 type env struct {
 	t        *testing.T
 	commands *redis.Client
 	keys     []string
-	// connectionNames maps a queue to the unique CLIENT SETNAME of its blocking connections.
+	// connectionNames ánh xạ một queue tới CLIENT SETNAME duy nhất của các connection blocking của nó.
 	connectionNames map[*ReliableQueue]string
 }
 
@@ -52,11 +52,11 @@ func (e *env) queueKey() string {
 	return key
 }
 
-// newQueue builds one consumer-side queue: shared commands client, its own blocking client.
+// newQueue dựng một queue phía consumer: client lệnh dùng chung, client blocking riêng.
 func (e *env) newQueue(queueKey string, blockTimeout time.Duration, consumerIDs ...string) (*ReliableQueue, *redis.Client) {
 	e.t.Helper()
-	// A unique connection name lets a test find exactly this connection in CLIENT LIST.
-	// Every connection of the pool runs CLIENT SETNAME when it is opened.
+	// Tên connection duy nhất giúp test tìm đúng connection này trong CLIENT LIST.
+	// Mọi connection của pool đều chạy CLIENT SETNAME khi được mở.
 	name := testkit.UniqueName("lab03-blocking")
 	opts := redisOptions(e.t)
 	opts.OnConnect = func(ctx context.Context, conn *redis.Conn) error {
@@ -85,7 +85,7 @@ func mustDequeue(t *testing.T, q *ReliableQueue, consumerID string) string {
 	t.Helper()
 	msg, ok, err := q.Dequeue(context.Background(), consumerID)
 	if err != nil || !ok {
-		t.Fatalf("Dequeue(%s) = %q, %v, %v; want a message", consumerID, msg, ok, err)
+		t.Fatalf("Dequeue(%s) = %q, %v, %v; mong đợi một message", consumerID, msg, ok, err)
 	}
 	return msg
 }
@@ -93,12 +93,12 @@ func mustDequeue(t *testing.T, q *ReliableQueue, consumerID string) string {
 func assertList(t *testing.T, what string, got, want []string) {
 	t.Helper()
 	if !slices.Equal(got, want) {
-		t.Fatalf("%s = %v, want %v", what, got, want)
+		t.Fatalf("%s = %v, mong đợi %v", what, got, want)
 	}
 }
 
-// isBlockedInBlmove reports whether a client named connectionName is blocked in BLMOVE right
-// now, according to CLIENT LIST (flags contain "b", cmd is blmove).
+// isBlockedInBlmove cho biết client tên connectionName có đang bị chặn trong BLMOVE ngay lúc này
+// hay không, theo CLIENT LIST (flags chứa "b", cmd là blmove).
 func isBlockedInBlmove(t *testing.T, rdb *redis.Client, connectionName string) bool {
 	t.Helper()
 	list, err := rdb.ClientList(context.Background()).Result()
@@ -130,17 +130,17 @@ func TestMessageStaysInProcessingListUntilAck(t *testing.T) {
 	assertList(t, "queue", e.list(queueKey), []string{"job-1"})
 
 	if got := mustDequeue(t, queue, "worker-1"); got != "job-1" {
-		t.Fatalf("Dequeue = %q, want job-1", got)
+		t.Fatalf("Dequeue = %q, mong đợi job-1", got)
 	}
 
-	// BLMOVE moved the message atomically: gone from the queue, parked in the processing list.
+	// BLMOVE chuyển message một cách atomic: biến khỏi queue, được cất trong processing list.
 	assertList(t, "queue", e.list(queueKey), []string{})
 	assertList(t, "processing", e.list(queue.ProcessingKey("worker-1")), []string{"job-1"})
 
-	// Only the ack removes it from the processing list.
+	// Chỉ có ack mới xóa nó khỏi processing list.
 	acked, err := queue.Ack(ctx, "worker-1", "job-1")
 	if err != nil || !acked {
-		t.Fatalf("Ack = %v, %v; want true", acked, err)
+		t.Fatalf("Ack = %v, %v; mong đợi true", acked, err)
 	}
 	assertList(t, "processing", e.list(queue.ProcessingKey("worker-1")), []string{})
 }
@@ -155,28 +155,28 @@ func TestMessageIsRecoveredAfterConsumerCrash(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// worker-a takes the message and "crashes": it never acks, and its connection is dropped.
+	// worker-a lấy message rồi "crash": nó không bao giờ ack, và connection của nó bị cắt.
 	if got := mustDequeue(t, crashing, "worker-a"); got != "job-1" {
-		t.Fatalf("Dequeue = %q, want job-1", got)
+		t.Fatalf("Dequeue = %q, mong đợi job-1", got)
 	}
 	_ = crashingConn.Close()
 	assertList(t, "processing of worker-a", e.list(survivor.ProcessingKey("worker-a")), []string{"job-1"})
 	assertList(t, "queue", e.list(queueKey), []string{})
 
-	// A recovery pass puts the dead consumer's message back on the queue.
+	// Một lượt recovery đưa message của consumer đã chết về lại queue.
 	recovered, err := survivor.RecoverStale(ctx, "worker-a")
 	if err != nil || recovered != 1 {
-		t.Fatalf("RecoverStale = %d, %v; want 1", recovered, err)
+		t.Fatalf("RecoverStale = %d, %v; mong đợi 1", recovered, err)
 	}
 	assertList(t, "processing of worker-a", e.list(survivor.ProcessingKey("worker-a")), []string{})
 
-	// Another consumer now receives the very same message: at-least-once delivery.
+	// Một consumer khác giờ nhận đúng message đó: at-least-once delivery.
 	if got := mustDequeue(t, survivor, "worker-b"); got != "job-1" {
-		t.Fatalf("Dequeue after recovery = %q, want job-1", got)
+		t.Fatalf("Dequeue sau recovery = %q, mong đợi job-1", got)
 	}
 	acked, err := survivor.Ack(ctx, "worker-b", "job-1")
 	if err != nil || !acked {
-		t.Fatalf("Ack = %v, %v; want true", acked, err)
+		t.Fatalf("Ack = %v, %v; mong đợi true", acked, err)
 	}
 	assertList(t, "queue", e.list(queueKey), []string{})
 	assertList(t, "processing of worker-b", e.list(survivor.ProcessingKey("worker-b")), []string{})
@@ -191,12 +191,12 @@ func TestDequeueOnEmptyQueueReturnsNilAfterTheBlockTimeout(t *testing.T) {
 	waited := time.Since(started)
 
 	if err != nil || ok || msg != "" {
-		t.Fatalf("Dequeue on empty queue = %q, %v, %v; want no message and no error", msg, ok, err)
+		t.Fatalf("Dequeue trên queue rỗng = %q, %v, %v; mong đợi không có message và không có lỗi", msg, ok, err)
 	}
-	// BLMOVE really blocked for about the timeout (it cannot return earlier on an empty list),
-	// and an empty result leaves nothing in the processing list.
+	// BLMOVE thực sự đã chặn khoảng bằng timeout (nó không thể return sớm hơn trên list rỗng),
+	// và kết quả rỗng không để lại gì trong processing list.
 	if waited < 900*time.Millisecond {
-		t.Fatalf("Dequeue returned after %v, want about the 1s block timeout", waited)
+		t.Fatalf("Dequeue return sau %v, mong đợi khoảng block timeout 1s", waited)
 	}
 	assertList(t, "processing", e.list(queue.ProcessingKey("worker-1")), []string{})
 }
@@ -216,7 +216,7 @@ func TestBlockedDequeueWakesUpWhenAMessageArrives(t *testing.T) {
 		msg, ok, err := queue.Dequeue(ctx, "worker-1")
 		done <- result{msg, ok, err}
 	}()
-	// Wait until the server reports THIS connection as blocked in BLMOVE (flags=b in CLIENT LIST).
+	// Chờ tới khi server báo CHÍNH connection này đang bị chặn trong BLMOVE (flags=b trong CLIENT LIST).
 	testkit.Eventually(t, 5*time.Second, func() (struct{}, bool) {
 		return struct{}{}, isBlockedInBlmove(t, e.commands, e.connectionNames[queue])
 	})
@@ -224,14 +224,14 @@ func TestBlockedDequeueWakesUpWhenAMessageArrives(t *testing.T) {
 	if err := queue.Enqueue(ctx, "late-job"); err != nil {
 		t.Fatal(err)
 	}
-	// The push wakes the blocked client right away, long before the 10 second timeout.
+	// Lệnh push đánh thức client đang bị chặn ngay lập tức, rất lâu trước timeout 10 giây.
 	select {
 	case r := <-done:
 		if r.err != nil || !r.ok || r.msg != "late-job" {
-			t.Fatalf("Dequeue = %q, %v, %v; want late-job", r.msg, r.ok, r.err)
+			t.Fatalf("Dequeue = %q, %v, %v; mong đợi late-job", r.msg, r.ok, r.err)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("blocked Dequeue did not wake up after Enqueue")
+		t.Fatal("Dequeue đang bị chặn không được đánh thức sau Enqueue")
 	}
 }
 
@@ -246,7 +246,7 @@ func TestMessagesAreDeliveredInFifoOrder(t *testing.T) {
 	}
 	for _, want := range []string{"a", "b", "c"} {
 		if got := mustDequeue(t, queue, "worker-1"); got != want {
-			t.Fatalf("Dequeue = %q, want %q", got, want)
+			t.Fatalf("Dequeue = %q, mong đợi %q", got, want)
 		}
 	}
 }
@@ -256,7 +256,7 @@ func TestRecoverStaleOnEmptyProcessingListReturnsZero(t *testing.T) {
 	queue, _ := e.newQueue(e.queueKey(), time.Second)
 	n, err := queue.RecoverStale(context.Background(), "nobody")
 	if err != nil || n != 0 {
-		t.Fatalf("RecoverStale = %d, %v; want 0", n, err)
+		t.Fatalf("RecoverStale = %d, %v; mong đợi 0", n, err)
 	}
 }
 
@@ -278,11 +278,11 @@ func TestRecoveredMessagesAreRedeliveredInTheirOriginalOrder(t *testing.T) {
 
 	recovered, err := survivor.RecoverStale(ctx, "worker-a")
 	if err != nil || recovered != 3 {
-		t.Fatalf("RecoverStale = %d, %v; want 3", recovered, err)
+		t.Fatalf("RecoverStale = %d, %v; mong đợi 3", recovered, err)
 	}
 	for _, want := range []string{"a", "b", "c"} {
 		if got := mustDequeue(t, survivor, "worker-b"); got != want {
-			t.Fatalf("Dequeue after recovery = %q, want %q", got, want)
+			t.Fatalf("Dequeue sau recovery = %q, mong đợi %q", got, want)
 		}
 	}
 }
@@ -292,12 +292,12 @@ func TestAckOfAMessageNotInTheProcessingListReturnsFalse(t *testing.T) {
 	queue, _ := e.newQueue(e.queueKey(), time.Second, "worker-1")
 	acked, err := queue.Ack(context.Background(), "worker-1", "never-dequeued")
 	if err != nil || acked {
-		t.Fatalf("Ack = %v, %v; want false", acked, err)
+		t.Fatalf("Ack = %v, %v; mong đợi false", acked, err)
 	}
 }
 
-// Go only: the typed BLMove command of go-redis extends the socket read deadline by the block
-// time, so a client ReadTimeout shorter than the block time does not break it.
+// Chỉ có ở Go: lệnh BLMove có kiểu của go-redis kéo dài read deadline của socket thêm đúng thời gian
+// block, nên ReadTimeout của client ngắn hơn thời gian block cũng không làm nó hỏng.
 func TestTypedBlockingCommandOutlivesClientReadTimeout(t *testing.T) {
 	e := newEnv(t)
 	opts := redisOptions(t)
@@ -309,6 +309,6 @@ func TestTypedBlockingCommandOutlivesClientReadTimeout(t *testing.T) {
 
 	msg, ok, err := queue.Dequeue(context.Background(), "worker-1")
 	if err != nil || ok || msg != "" {
-		t.Fatalf("Dequeue = %q, %v, %v; want a clean empty result after 1s despite ReadTimeout 300ms", msg, ok, err)
+		t.Fatalf("Dequeue = %q, %v, %v; mong đợi kết quả rỗng sạch sau 1s dù ReadTimeout là 300ms", msg, ok, err)
 	}
 }

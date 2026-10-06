@@ -1,5 +1,5 @@
-// Command demo shows consumer A crashing without XACK, consumer B taking the entries over with
-// XAUTOCLAIM, and the raw reply shapes go-redis gets on RESP3.
+// Command demo cho thấy consumer A crash mà không XACK, consumer B tiếp quản các entry bằng
+// XAUTOCLAIM, và dạng reply thô mà go-redis nhận được trên RESP3.
 package main
 
 import (
@@ -73,13 +73,13 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("consumer-a read: %+v\n", read)
-	if err := showPending("after read, nothing acked"); err != nil {
+	fmt.Printf("consumer-a đã đọc: %+v\n", read)
+	if err := showPending("sau khi đọc, chưa ack gì"); err != nil {
 		return err
 	}
 
 	_ = blockingA.Close()
-	fmt.Println("consumer-a crashes without XACK")
+	fmt.Println("consumer-a crash mà không XACK")
 	deadline := time.Now().Add(10 * time.Second)
 	for {
 		entries, err := consumerB.PendingEntries(ctx, group)
@@ -90,7 +90,7 @@ func run() error {
 			break
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("entry never became idle")
+			return fmt.Errorf("entry chưa bao giờ đạt idle yêu cầu")
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -99,8 +99,8 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("consumer-b claimed: %+v\n", claimed)
-	if err := showPending("after XAUTOCLAIM (owner is consumer-b, deliveries 2)"); err != nil {
+	fmt.Printf("consumer-b đã claim: %+v\n", claimed)
+	if err := showPending("sau XAUTOCLAIM (chủ sở hữu là consumer-b, deliveries 2)"); err != nil {
 		return err
 	}
 
@@ -113,29 +113,29 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("pending count after acks:", n)
+	fmt.Println("số pending sau khi ack:", n)
 
 	rest, err := consumerB.Consume(ctx, group, "consumer-b", 10)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("consumer-b also reads the never delivered entry: %+v\n", rest)
+	fmt.Printf("consumer-b còn đọc entry chưa từng được giao: %+v\n", rest)
 
-	fmt.Println("== raw reply shapes (go-redis v9.23.0, RESP3) ==")
+	fmt.Println("== dạng reply thô (go-redis v9.23.0, RESP3) ==")
 	pending, err := commands.Do(ctx, "XPENDING", stream, group).Result()
 	if err != nil {
 		return err
 	}
-	fmt.Printf("XPENDING summary: %#v\n", pending)
+	fmt.Printf("XPENDING dạng summary: %#v\n", pending)
 	autoclaim, err := commands.Do(ctx, "XAUTOCLAIM", stream, group, "consumer-c", 0, "0-0").Result()
 	if err != nil {
 		return err
 	}
-	fmt.Printf("XAUTOCLAIM (3 elements): %#v\n", autoclaim)
+	fmt.Printf("XAUTOCLAIM (3 phần tử): %#v\n", autoclaim)
 	raw, err := commands.Do(ctx, "XREADGROUP", "GROUP", group, "consumer-c", "COUNT", 1, "STREAMS", stream, "0").Result()
 	if err != nil {
 		return err
 	}
-	fmt.Printf("XREADGROUP re-read of own pending (raw, a map on RESP3): %#v\n", raw)
+	fmt.Printf("XREADGROUP đọc lại pending của chính nó (thô, là một map trên RESP3): %#v\n", raw)
 	return nil
 }

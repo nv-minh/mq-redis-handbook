@@ -25,12 +25,12 @@ func redisOptions(t *testing.T) *redis.Options {
 	}
 	opts, err := redis.ParseURL(url)
 	if err != nil {
-		t.Fatalf("parse REDIS_URL: %v", err)
+		t.Fatalf("REDIS_URL không hợp lệ: %v", err)
 	}
 	return opts
 }
 
-// env holds the shared commands client and the stream keys to delete when the test ends.
+// env giữ client lệnh dùng chung và các key stream cần xóa khi test kết thúc.
 type env struct {
 	t        *testing.T
 	commands *redis.Client
@@ -42,7 +42,7 @@ func newEnv(t *testing.T) *env {
 	e := &env{t: t, commands: redis.NewClient(redisOptions(t))}
 	t.Cleanup(func() {
 		if len(e.streams) > 0 {
-			// DEL removes the stream together with its consumer groups and their pending lists.
+			// DEL xóa stream cùng với các consumer group và pending list của chúng.
 			e.commands.Del(context.Background(), e.streams...)
 		}
 		_ = e.commands.Close()
@@ -56,7 +56,7 @@ func (e *env) streamKey() string {
 	return key
 }
 
-// newQueue builds one consumer-side object: shared commands client, its own blocking client.
+// newQueue dựng một đối tượng phía consumer: client lệnh dùng chung, client blocking riêng.
 func (e *env) newQueue(stream string) (*StreamQueue, *redis.Client) {
 	e.t.Helper()
 	blocking := redis.NewClient(redisOptions(e.t))
@@ -68,7 +68,7 @@ func mustPublish(t *testing.T, q *StreamQueue, fields map[string]string) string 
 	t.Helper()
 	id, err := q.Publish(context.Background(), fields)
 	if err != nil {
-		t.Fatalf("Publish: %v", err)
+		t.Fatalf("Publish lỗi: %v", err)
 	}
 	return id
 }
@@ -77,7 +77,7 @@ func mustConsume(t *testing.T, q *StreamQueue, group, consumer string, count int
 	t.Helper()
 	messages, err := q.Consume(context.Background(), group, consumer, count)
 	if err != nil {
-		t.Fatalf("Consume: %v", err)
+		t.Fatalf("Consume lỗi: %v", err)
 	}
 	return messages
 }
@@ -86,7 +86,7 @@ func mustPendingCount(t *testing.T, q *StreamQueue, group string) int64 {
 	t.Helper()
 	n, err := q.PendingCount(context.Background(), group)
 	if err != nil {
-		t.Fatalf("PendingCount: %v", err)
+		t.Fatalf("PendingCount lỗi: %v", err)
 	}
 	return n
 }
@@ -95,7 +95,7 @@ func mustPending(t *testing.T, q *StreamQueue, group string) []PendingEntry {
 	t.Helper()
 	entries, err := q.PendingEntries(context.Background(), group)
 	if err != nil {
-		t.Fatalf("PendingEntries: %v", err)
+		t.Fatalf("PendingEntries lỗi: %v", err)
 	}
 	return entries
 }
@@ -103,7 +103,7 @@ func mustPending(t *testing.T, q *StreamQueue, group string) []PendingEntry {
 func mustCreateGroup(t *testing.T, q *StreamQueue, group string) {
 	t.Helper()
 	if err := q.CreateGroup(context.Background(), group); err != nil {
-		t.Fatalf("CreateGroup: %v", err)
+		t.Fatalf("CreateGroup lỗi: %v", err)
 	}
 }
 
@@ -115,7 +115,7 @@ func ids(messages []Message) []string {
 	return out
 }
 
-// compareIDs orders stream ids by millisecond part, then by sequence part.
+// compareIDs sắp id của stream theo phần mili giây, rồi theo phần sequence.
 func compareIDs(a, b string) int {
 	split := func(id string) (int64, int64) {
 		ms, seq, _ := strings.Cut(id, "-")
@@ -144,7 +144,7 @@ func TestEachMessageGoesToOneConsumerInGroup(t *testing.T) {
 		published = append(published, mustPublish(t, c1, map[string]string{"n": strconv.Itoa(i)}))
 	}
 
-	// Two consumers of the same group read at the same time until everything has been delivered.
+	// Hai consumer của cùng một group đọc đồng thời cho tới khi mọi thứ đã được giao.
 	var (
 		mu       sync.Mutex
 		received = map[string][]string{}
@@ -160,7 +160,7 @@ func TestEachMessageGoesToOneConsumerInGroup(t *testing.T) {
 		for count() < total {
 			messages, err := q.Consume(context.Background(), group, name, 2)
 			if err != nil {
-				t.Errorf("Consume(%s): %v", name, err)
+				t.Errorf("Consume(%s) lỗi: %v", name, err)
 				return
 			}
 			mu.Lock()
@@ -173,27 +173,27 @@ func TestEachMessageGoesToOneConsumerInGroup(t *testing.T) {
 	go readAll(c2, "c2")
 	wg.Wait()
 
-	// Each id was delivered exactly once, and together the consumers got every message.
+	// Mỗi id được giao đúng một lần, và gộp lại các consumer nhận đủ mọi message.
 	all := append(append([]string{}, received["c1"]...), received["c2"]...)
 	if len(all) != total {
-		t.Fatalf("delivered %d messages, want %d", len(all), total)
+		t.Fatalf("đã giao %d message, mong đợi %d", len(all), total)
 	}
 	sort.Slice(all, func(i, j int) bool { return compareIDs(all[i], all[j]) < 0 })
 	if !slices.Equal(all, published) {
-		t.Fatalf("delivered ids = %v, want each of %v exactly once", all, published)
+		t.Fatalf("các id đã giao = %v, mong đợi mỗi id trong %v đúng một lần", all, published)
 	}
 
-	// The server agrees: the pending list holds each id once, owned by the consumer that received it.
+	// Server cũng đồng ý: pending list giữ mỗi id một lần, thuộc về consumer đã nhận nó.
 	pending := mustPending(t, c1, group)
 	if len(pending) != total {
-		t.Fatalf("pending entries = %d, want %d", len(pending), total)
+		t.Fatalf("số entry pending = %d, mong đợi %d", len(pending), total)
 	}
 	for _, entry := range pending {
 		if !slices.Contains(received[entry.Consumer], entry.ID) {
-			t.Fatalf("entry %s is owned by %s but that consumer did not receive it", entry.ID, entry.Consumer)
+			t.Fatalf("entry %s thuộc về %s nhưng consumer đó không nhận nó", entry.ID, entry.Consumer)
 		}
 		if entry.DeliveryCount != 1 {
-			t.Fatalf("entry %s delivery count = %d, want 1", entry.ID, entry.DeliveryCount)
+			t.Fatalf("delivery count của entry %s = %d, mong đợi 1", entry.ID, entry.DeliveryCount)
 		}
 	}
 }
@@ -210,27 +210,27 @@ func TestXackRemovesEntryFromPendingList(t *testing.T) {
 
 	messages := mustConsume(t, q, group, "c1", 10)
 	if len(messages) != 3 {
-		t.Fatalf("Consume returned %d messages, want 3", len(messages))
+		t.Fatalf("Consume trả về %d message, mong đợi 3", len(messages))
 	}
-	// Delivered but not acked: all three sit in the pending list (PEL).
+	// Đã giao nhưng chưa ack: cả ba nằm trong pending list (PEL).
 	if n := mustPendingCount(t, q, group); n != 3 {
-		t.Fatalf("pending before ack = %d, want 3", n)
+		t.Fatalf("pending trước khi ack = %d, mong đợi 3", n)
 	}
 
 	acked, err := q.Ack(ctx, group, messages[0].ID)
 	if err != nil || acked != 1 {
-		t.Fatalf("Ack = %d, %v; want 1", acked, err)
+		t.Fatalf("Ack = %d, %v; mong đợi 1", acked, err)
 	}
 	if n := mustPendingCount(t, q, group); n != 2 {
-		t.Fatalf("pending after one ack = %d, want 2", n)
+		t.Fatalf("pending sau một lần ack = %d, mong đợi 2", n)
 	}
-	// Acking the same id again removes nothing.
+	// Ack lại cùng một id không xóa thêm gì.
 	acked, err = q.Ack(ctx, group, messages[0].ID)
 	if err != nil || acked != 0 {
-		t.Fatalf("second Ack = %d, %v; want 0", acked, err)
+		t.Fatalf("Ack lần hai = %d, %v; mong đợi 0", acked, err)
 	}
 	if n := mustPendingCount(t, q, group); n != 2 {
-		t.Fatalf("pending after repeated ack = %d, want 2", n)
+		t.Fatalf("pending sau khi ack lặp lại = %d, mong đợi 2", n)
 	}
 
 	for _, m := range messages[1:] {
@@ -239,12 +239,12 @@ func TestXackRemovesEntryFromPendingList(t *testing.T) {
 		}
 	}
 	if n := mustPendingCount(t, q, group); n != 0 {
-		t.Fatalf("pending after all acks = %d, want 0", n)
+		t.Fatalf("pending sau khi ack hết = %d, mong đợi 0", n)
 	}
 }
 
-// waitUntilIdle polls (never sleeps) until the first pending entry has been idle for idleAtLeast.
-// It returns the idle time it observed.
+// waitUntilIdle poll (không bao giờ sleep) tới khi entry pending đầu tiên đã idle ít nhất idleAtLeast.
+// Hàm trả về idle time mà nó quan sát được.
 func waitUntilIdle(t *testing.T, q *StreamQueue, group string, idleAtLeast time.Duration) time.Duration {
 	t.Helper()
 	return testkit.Eventually(t, 10*time.Second, func() (time.Duration, bool) {
@@ -267,43 +267,43 @@ func TestXautoclaimRecoversPendingFromDeadConsumer(t *testing.T) {
 	mustCreateGroup(t, dead, group)
 	id := mustPublish(t, dead, map[string]string{"job": "send-email"})
 
-	// Consumer A reads the entry and "crashes": it never acks and its client is closed.
+	// Consumer A đọc entry rồi "crash": nó không bao giờ ack và client của nó bị đóng.
 	delivered := mustConsume(t, dead, group, "consumer-a", 1)
 	if !slices.Equal(ids(delivered), []string{id}) {
-		t.Fatalf("delivered = %v, want [%s]", ids(delivered), id)
+		t.Fatalf("delivered = %v, mong đợi [%s]", ids(delivered), id)
 	}
 	_ = deadConn.Close()
 
-	// Wait (no sleep) until the entry has been idle for at least twice minIdle, so the claim
-	// below is far from the boundary of "idle time greater than min-idle-time".
+	// Chờ (không sleep) tới khi entry đã idle ít nhất gấp đôi minIdle, để lần claim
+	// bên dưới cách xa ranh giới "idle time lớn hơn min-idle-time".
 	idleBeforeClaim := waitUntilIdle(t, rescuer, group, 2*minIdle)
 
 	claimed, err := rescuer.ClaimStale(ctx, group, "consumer-b", minIdle)
 	if err != nil {
-		t.Fatalf("ClaimStale: %v", err)
+		t.Fatalf("ClaimStale lỗi: %v", err)
 	}
 	if len(claimed.Messages) != 1 || claimed.Messages[0].ID != id || claimed.Messages[0].Fields["job"] != "send-email" {
-		t.Fatalf("claimed messages = %+v, want the one entry %s", claimed.Messages, id)
+		t.Fatalf("messages đã claim = %+v, mong đợi đúng một entry %s", claimed.Messages, id)
 	}
 	if len(claimed.DeletedIDs) != 0 {
-		t.Fatalf("deleted ids = %v, want none", claimed.DeletedIDs)
+		t.Fatalf("các id đã xóa = %v, mong đợi rỗng", claimed.DeletedIDs)
 	}
 
-	// The entry moved to consumer B's pending list, and the claim counted as a second delivery.
+	// Entry đã chuyển sang pending list của consumer B, và lần claim được tính là lần giao thứ hai.
 	pending := mustPending(t, rescuer, group)
 	if len(pending) != 1 || pending[0].ID != id || pending[0].Consumer != "consumer-b" || pending[0].DeliveryCount != 2 {
-		t.Fatalf("pending after claim = %+v, want %s owned by consumer-b with delivery count 2", pending, id)
+		t.Fatalf("pending sau khi claim = %+v, mong đợi %s thuộc về consumer-b với delivery count 2", pending, id)
 	}
-	if pending[0].Idle >= idleBeforeClaim { // the claim reset the idle time
-		t.Fatalf("idle after claim = %v, want less than the %v before it", pending[0].Idle, idleBeforeClaim)
+	if pending[0].Idle >= idleBeforeClaim { // lần claim đã đặt lại idle time
+		t.Fatalf("idle sau khi claim = %v, mong đợi nhỏ hơn %v trước đó", pending[0].Idle, idleBeforeClaim)
 	}
 
-	// B finishes the job.
+	// B hoàn thành công việc.
 	if n, err := rescuer.Ack(ctx, group, id); err != nil || n != 1 {
-		t.Fatalf("Ack = %d, %v; want 1", n, err)
+		t.Fatalf("Ack = %d, %v; mong đợi 1", n, err)
 	}
 	if n := mustPendingCount(t, rescuer, group); n != 0 {
-		t.Fatalf("pending after ack = %d, want 0", n)
+		t.Fatalf("pending sau khi ack = %d, mong đợi 0", n)
 	}
 }
 
@@ -314,13 +314,13 @@ func TestClaimStaleWithNothingPendingReturnsEmptyResult(t *testing.T) {
 	group := testkit.UniqueName("workers")
 	mustCreateGroup(t, q, group)
 
-	// Group exists but nothing was ever delivered.
+	// Group đã tồn tại nhưng chưa từng giao gì.
 	claimed, err := q.ClaimStale(ctx, group, "consumer-b", 100*time.Millisecond)
 	if err != nil || len(claimed.Messages) != 0 || len(claimed.DeletedIDs) != 0 {
-		t.Fatalf("ClaimStale on empty PEL = %+v, %v; want empty and no error", claimed, err)
+		t.Fatalf("ClaimStale trên PEL rỗng = %+v, %v; mong đợi rỗng và không có lỗi", claimed, err)
 	}
 
-	// Delivered and acked: the pending list is empty again.
+	// Đã giao và đã ack: pending list lại rỗng.
 	id := mustPublish(t, q, map[string]string{"n": "1"})
 	mustConsume(t, q, group, "consumer-a", 1)
 	if _, err := q.Ack(ctx, group, id); err != nil {
@@ -328,7 +328,7 @@ func TestClaimStaleWithNothingPendingReturnsEmptyResult(t *testing.T) {
 	}
 	claimed, err = q.ClaimStale(ctx, group, "consumer-b", 100*time.Millisecond)
 	if err != nil || len(claimed.Messages) != 0 || len(claimed.DeletedIDs) != 0 {
-		t.Fatalf("ClaimStale after ack = %+v, %v; want empty and no error", claimed, err)
+		t.Fatalf("ClaimStale sau khi ack = %+v, %v; mong đợi rỗng và không có lỗi", claimed, err)
 	}
 }
 
@@ -340,14 +340,14 @@ func TestXautoclaimSkipsEntriesThatAreNotIdleLongEnough(t *testing.T) {
 	id := mustPublish(t, q, map[string]string{"n": "1"})
 	mustConsume(t, q, group, "consumer-a", 1)
 
-	// One minute of min idle against an entry that was delivered milliseconds ago.
+	// Min idle một phút áp lên một entry vừa được giao cách đây vài mili giây.
 	claimed, err := q.ClaimStale(context.Background(), group, "consumer-b", time.Minute)
 	if err != nil || len(claimed.Messages) != 0 {
-		t.Fatalf("ClaimStale = %+v, %v; want nothing claimed", claimed, err)
+		t.Fatalf("ClaimStale = %+v, %v; mong đợi không claim được gì", claimed, err)
 	}
 	pending := mustPending(t, q, group)
 	if len(pending) != 1 || pending[0].ID != id || pending[0].Consumer != "consumer-a" || pending[0].DeliveryCount != 1 {
-		t.Fatalf("pending = %+v, want %s still owned by consumer-a with delivery count 1", pending, id)
+		t.Fatalf("pending = %+v, mong đợi %s vẫn thuộc về consumer-a với delivery count 1", pending, id)
 	}
 }
 
@@ -361,24 +361,24 @@ func TestXautoclaimReportsIDsDeletedFromTheStream(t *testing.T) {
 	mustCreateGroup(t, q, group)
 	id := mustPublish(t, q, map[string]string{"n": "1"})
 	mustConsume(t, q, group, "consumer-a", 1)
-	// The entry leaves the stream (XDEL, or trimming) while it is still in the pending list.
+	// Entry rời khỏi stream (XDEL, hoặc trimming) trong khi vẫn còn trong pending list.
 	if n, err := e.commands.XDel(ctx, stream, id).Result(); err != nil || n != 1 {
-		t.Fatalf("XDEL = %d, %v; want 1", n, err)
+		t.Fatalf("XDEL = %d, %v; mong đợi 1", n, err)
 	}
 	_ = waitUntilIdle(t, q, group, 2*minIdle)
 
-	// Redis 7.0+: XAUTOCLAIM does not claim it, drops it from the PEL and returns its id as the
-	// third element of the reply. The typed go-redis XAutoClaim drops that element, which is why
-	// the lab parses the raw reply.
+	// Redis 7.0+: XAUTOCLAIM không claim nó, loại nó khỏi PEL và trả về id của nó ở
+	// phần tử thứ ba của reply. XAutoClaim có kiểu của go-redis bỏ phần tử đó, vì vậy
+	// lab parse reply thô.
 	claimed, err := q.ClaimStale(ctx, group, "consumer-b", minIdle)
 	if err != nil {
-		t.Fatalf("ClaimStale: %v", err)
+		t.Fatalf("ClaimStale lỗi: %v", err)
 	}
 	if len(claimed.Messages) != 0 || !slices.Equal(claimed.DeletedIDs, []string{id}) {
-		t.Fatalf("ClaimStale = %+v, want no messages and deleted ids [%s]", claimed, id)
+		t.Fatalf("ClaimStale = %+v, mong đợi không có message và các id đã xóa là [%s]", claimed, id)
 	}
 	if n := mustPendingCount(t, q, group); n != 0 {
-		t.Fatalf("pending = %d, want 0", n)
+		t.Fatalf("pending = %d, mong đợi 0", n)
 	}
 }
 
@@ -392,10 +392,10 @@ func TestConsumeReturnsEmptyListWhenNoNewMessageArrivesWithinTheBlockTime(t *tes
 	messages := mustConsume(t, q, group, "c1", 5)
 
 	if len(messages) != 0 {
-		t.Fatalf("Consume = %+v, want empty", messages)
+		t.Fatalf("Consume = %+v, mong đợi rỗng", messages)
 	}
 	if waited := time.Since(started); waited < blockTime-50*time.Millisecond {
-		t.Fatalf("Consume returned after %v, want about the %v block time", waited, blockTime)
+		t.Fatalf("Consume return sau %v, mong đợi khoảng block time %v", waited, blockTime)
 	}
 }
 
@@ -405,11 +405,11 @@ func TestCreateGroupIsIdempotent(t *testing.T) {
 	q, _ := e.newQueue(e.streamKey())
 	group := testkit.UniqueName("workers")
 	mustCreateGroup(t, q, group)
-	// The second XGROUP CREATE fails with BUSYGROUP on the server, and the lab swallows exactly that.
+	// XGROUP CREATE lần thứ hai bị server báo lỗi BUSYGROUP, và lab chỉ nuốt đúng lỗi đó.
 	if err := q.CreateGroup(ctx, group); err != nil {
-		t.Fatalf("second CreateGroup = %v, want nil", err)
+		t.Fatalf("CreateGroup lần hai = %v, mong đợi nil", err)
 	}
-	// Other errors are not swallowed: a group on a key of the wrong type is a WRONGTYPE error.
+	// Các lỗi khác không bị nuốt: tạo group trên key sai kiểu là lỗi WRONGTYPE.
 	notAStream := e.streamKey()
 	if err := e.commands.Set(ctx, notAStream, "x", 0).Err(); err != nil {
 		t.Fatal(err)
@@ -417,6 +417,6 @@ func TestCreateGroupIsIdempotent(t *testing.T) {
 	wrongType, _ := e.newQueue(notAStream)
 	err := wrongType.CreateGroup(ctx, group)
 	if err == nil || !strings.Contains(err.Error(), "WRONGTYPE") {
-		t.Fatalf("CreateGroup on a string key = %v, want a WRONGTYPE error", err)
+		t.Fatalf("CreateGroup trên key kiểu string = %v, mong đợi lỗi WRONGTYPE", err)
 	}
 }

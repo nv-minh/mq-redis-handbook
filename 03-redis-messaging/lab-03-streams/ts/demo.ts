@@ -1,6 +1,6 @@
-// Demo: consumer A reads two entries and crashes without XACK, the entries stay in its pending
-// list (PEL), consumer B takes them over with XAUTOCLAIM and acks. Also prints the raw reply
-// shapes ioredis 6.0.0 gets on RESP3. The stream key is removed at the end.
+// Demo: consumer A đọc hai entry rồi crash mà không XACK, các entry nằm lại trong pending
+// list (PEL) của nó, consumer B tiếp quản bằng XAUTOCLAIM rồi ack. Demo cũng in dạng reply
+// thô mà ioredis 6.0.0 nhận được trên RESP3. Key của stream bị xóa ở cuối.
 import { Redis } from "ioredis";
 import { eventually, uniqueName } from "@handbook/testkit";
 import { StreamQueue } from "./lab.js";
@@ -25,11 +25,11 @@ try {
   for (const job of ["job-1", "job-2", "job-3"]) await consumerA.publish({ job });
 
   const read = await consumerA.consume(group, "consumer-a", 2);
-  console.log("consumer-a read:", JSON.stringify(read));
-  await showPending("after read, nothing acked");
+  console.log("consumer-a đã đọc:", JSON.stringify(read));
+  await showPending("sau khi đọc, chưa ack gì");
 
   blockingA.disconnect();
-  console.log("consumer-a crashes without XACK");
+  console.log("consumer-a crash mà không XACK");
   await eventually(
     async () => {
       const [entry] = await consumerB.pendingEntries(group);
@@ -39,23 +39,23 @@ try {
   );
 
   const claimed = await consumerB.claimStale(group, "consumer-b", minIdleMs);
-  console.log("consumer-b claimed:", JSON.stringify(claimed));
-  await showPending("after XAUTOCLAIM (owner is consumer-b, deliveryCount 2)");
+  console.log("consumer-b đã claim:", JSON.stringify(claimed));
+  await showPending("sau XAUTOCLAIM (chủ sở hữu là consumer-b, deliveryCount 2)");
 
   for (const message of claimed.messages) await consumerB.ack(group, message.id);
-  console.log("pending count after acks:", await consumerB.pendingCount(group));
+  console.log("số pending sau khi ack:", await consumerB.pendingCount(group));
 
   const rest = await consumerB.consume(group, "consumer-b", 10);
-  console.log("consumer-b also reads the never delivered entry:", JSON.stringify(rest));
+  console.log("consumer-b còn đọc entry chưa từng được giao:", JSON.stringify(rest));
 
-  console.log("== raw reply shapes (ioredis 6.0.0, RESP3) ==");
-  console.log("XPENDING summary:", JSON.stringify(await redis.xpending(stream, group)));
+  console.log("== dạng reply thô (ioredis 6.0.0, RESP3) ==");
+  console.log("XPENDING dạng summary:", JSON.stringify(await redis.xpending(stream, group)));
   console.log(
-    "XPENDING extended:",
+    "XPENDING dạng extended:",
     JSON.stringify(await redis.xpending(stream, group, "-", "+", 10)),
   );
   console.log(
-    "XAUTOCLAIM (3 elements):",
+    "XAUTOCLAIM (3 phần tử):",
     JSON.stringify(await redis.xautoclaim(stream, group, "consumer-c", 0, "0-0")),
   );
 } finally {

@@ -1,5 +1,5 @@
-// Demo: a consumer takes a message and crashes without ack, the message sits in its processing
-// list, a recovery pass moves it back and another consumer finishes it. Keys are removed at the end.
+// Demo: một consumer lấy message rồi crash mà không ack, message nằm lại trong processing list của nó,
+// một lượt recovery chuyển nó về queue và consumer khác xử lý xong. Các key bị xóa ở cuối.
 import { Redis } from "ioredis";
 import { uniqueName } from "@handbook/testkit";
 import { ReliableQueue } from "./lab.js";
@@ -27,28 +27,28 @@ async function show(label: string): Promise<void> {
 try {
   await survivor.enqueue("job-1");
   await survivor.enqueue("job-2");
-  await show("after enqueue");
+  await show("sau enqueue");
 
-  console.log("worker-a dequeues:", await crashing.dequeue("worker-a"));
-  await show("worker-a holds job-1 (no ack yet)");
+  console.log("worker-a dequeue được:", await crashing.dequeue("worker-a"));
+  await show("worker-a đang giữ job-1 (chưa ack)");
 
   crashedBlocking.disconnect();
-  console.log("worker-a crashes without ack");
-  console.log("recoverStale(worker-a) moved:", await survivor.recoverStale("worker-a"));
-  await show("after recovery");
+  console.log("worker-a crash mà không ack");
+  console.log("recoverStale(worker-a) đã chuyển:", await survivor.recoverStale("worker-a"));
+  await show("sau recovery");
 
   const started = Date.now();
   for (;;) {
     const msg = await survivor.dequeue("worker-b");
     if (msg === null) {
       console.log(
-        `worker-b dequeue on an empty queue: null after blocking ${Date.now() - started} ms in total`,
+        `worker-b dequeue trên queue rỗng: null sau khi chặn tổng cộng ${Date.now() - started} ms`,
       );
       break;
     }
-    console.log(`worker-b dequeues ${msg}, acks:`, await survivor.ack("worker-b", msg));
+    console.log(`worker-b dequeue ${msg}, ack:`, await survivor.ack("worker-b", msg));
   }
-  await show("end");
+  await show("kết thúc");
 } finally {
   await redis.del(queueKey, survivor.processingKey("worker-a"), survivor.processingKey("worker-b"));
   redis.disconnect();

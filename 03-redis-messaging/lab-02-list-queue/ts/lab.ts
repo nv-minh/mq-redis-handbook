@@ -1,26 +1,26 @@
 import type { Redis } from "ioredis";
 
 export interface ReliableQueueOptions {
-  /** Connection for normal commands (LPUSH, LREM, LMOVE, LRANGE). */
+  /** Connection cho các lệnh thường (LPUSH, LREM, LMOVE, LRANGE). */
   redis: Redis;
-  /** A connection used ONLY for BLMOVE: a blocked connection cannot serve other commands. */
+  /** Connection chỉ dùng cho BLMOVE: connection đang bị chặn không phục vụ được lệnh khác. */
   blocking: Redis;
-  /** Key of the queue list. Processing lists live under `<queue>:processing:<consumerId>`. */
+  /** Key của list queue. Các processing list nằm dưới `<queue>:processing:<consumerId>`. */
   queue: string;
-  /** How long dequeue waits on an empty queue, in seconds (BLMOVE timeout, fractions allowed). */
+  /** Thời gian dequeue chờ trên queue rỗng, tính bằng giây (timeout của BLMOVE, cho phép số lẻ). */
   blockTimeoutSeconds?: number;
 }
 
 /**
- * A reliable queue on Redis lists.
+ * Queue đáng tin cậy trên Redis list.
  *
- * enqueue: LPUSH queue msg (new messages enter at the left, consumers take from the right: FIFO).
- * dequeue: BLMOVE queue processing:<consumer> RIGHT LEFT, one atomic step that takes the oldest
- *          message AND parks it in the consumer's processing list, so a crash cannot lose it.
- * ack:     LREM processing:<consumer> 1 msg, the message is done.
- * recoverStale: move what a dead consumer left in its processing list back onto the queue.
+ * enqueue: LPUSH queue msg (message mới vào bên trái, consumer lấy từ bên phải: FIFO).
+ * dequeue: BLMOVE queue processing:<consumer> RIGHT LEFT, một bước atomic vừa lấy message cũ nhất
+ *          VỪA cất nó vào processing list của consumer, nên crash không làm mất message.
+ * ack:     LREM processing:<consumer> 1 msg, message đã xong.
+ * recoverStale: chuyển những gì consumer đã chết để lại trong processing list về lại queue.
  *
- * Delivery is at-least-once: a message recovered from a consumer that was only slow is processed twice.
+ * Delivery là at-least-once: message được recover từ một consumer chỉ chậm chứ chưa chết sẽ được xử lý hai lần.
  */
 export class ReliableQueue {
   private readonly redis: Redis;
@@ -35,7 +35,7 @@ export class ReliableQueue {
     this.blockTimeoutSeconds = options.blockTimeoutSeconds ?? 1;
   }
 
-  /** Key of the list that holds the messages `consumerId` has taken but not acked. */
+  /** Key của list giữ các message mà `consumerId` đã lấy nhưng chưa ack. */
   processingKey(consumerId: string): string {
     return `${this.queue}:processing:${consumerId}`;
   }
@@ -45,9 +45,9 @@ export class ReliableQueue {
   }
 
   /**
-   * Take the oldest message, blocking up to the block timeout. Resolves null when the queue stayed
-   * empty for the whole timeout (BLMOVE replies nil). The message stays in the processing list
-   * of `consumerId` until ack().
+   * Lấy message cũ nhất, chặn tối đa bằng block timeout. Resolve null khi queue rỗng suốt
+   * thời gian timeout (BLMOVE trả về nil). Message nằm trong processing list
+   * của `consumerId` cho tới khi ack().
    */
   dequeue(consumerId: string): Promise<string | null> {
     return this.blocking.blmove(
@@ -59,19 +59,19 @@ export class ReliableQueue {
     );
   }
 
-  /** Remove `msg` from the processing list of `consumerId`. Resolves false if it was not there. */
+  /** Xóa `msg` khỏi processing list của `consumerId`. Resolve false nếu nó không có ở đó. */
   async ack(consumerId: string, msg: string): Promise<boolean> {
     return (await this.redis.lrem(this.processingKey(consumerId), 1, msg)) === 1;
   }
 
   /**
-   * Put every message in the processing list of `consumerId` back on the queue, and resolve with
-   * how many were moved (0 for an empty list). Call it for a consumer you know is dead.
+   * Đưa mọi message trong processing list của `consumerId` về lại queue, và resolve với
+   * số message đã chuyển (0 nếu list rỗng). Gọi hàm này cho consumer mà bạn biết đã chết.
    *
-   * Each LMOVE is atomic, so a crash of the recovering process cannot lose a message.
-   * LEFT -> RIGHT: the processing list holds the newest message at its left end, so moving from
-   * its left end to the right end of the queue (the end consumers read from) leaves the oldest
-   * message last in line to be pushed, therefore first to be consumed again: original order kept.
+   * Mỗi LMOVE là atomic, nên tiến trình recover có crash cũng không làm mất message.
+   * LEFT -> RIGHT: processing list giữ message mới nhất ở đầu bên trái, nên chuyển từ đầu bên trái
+   * của nó sang đầu bên phải của queue (đầu mà consumer đọc) khiến message cũ nhất được push
+   * sau cùng, do đó được consume đầu tiên trở lại: giữ nguyên thứ tự ban đầu.
    */
   async recoverStale(consumerId: string): Promise<number> {
     const processing = this.processingKey(consumerId);

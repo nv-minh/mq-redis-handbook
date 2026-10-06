@@ -1,5 +1,5 @@
-// Command demo shows a consumer crashing without ack, the recovery pass and a second consumer
-// finishing the message.
+// Command demo cho thấy một consumer crash mà không ack, lượt recovery và một consumer thứ hai
+// xử lý nốt message.
 package main
 
 import (
@@ -65,7 +65,7 @@ func run() error {
 			return err
 		}
 	}
-	if err := show("after enqueue"); err != nil {
+	if err := show("sau enqueue"); err != nil {
 		return err
 	}
 
@@ -73,19 +73,19 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("worker-a dequeues:", msg)
-	if err := show("worker-a holds " + msg + " (no ack yet)"); err != nil {
+	fmt.Println("worker-a dequeue được:", msg)
+	if err := show("worker-a đang giữ " + msg + " (chưa ack)"); err != nil {
 		return err
 	}
 
 	_ = crashedBlocking.Close()
-	fmt.Println("worker-a crashes without ack")
+	fmt.Println("worker-a crash mà không ack")
 	moved, err := survivor.RecoverStale(ctx, "worker-a")
 	if err != nil {
 		return err
 	}
-	fmt.Println("RecoverStale(worker-a) moved:", moved)
-	if err := show("after recovery"); err != nil {
+	fmt.Println("RecoverStale(worker-a) đã chuyển:", moved)
+	if err := show("sau recovery"); err != nil {
 		return err
 	}
 
@@ -96,14 +96,14 @@ func run() error {
 			return err
 		}
 		if !ok {
-			fmt.Printf("worker-b dequeue on an empty queue: none after blocking %d ms in total\n", time.Since(started).Milliseconds())
+			fmt.Printf("worker-b dequeue trên queue rỗng: không có message sau khi chặn tổng cộng %d ms\n", time.Since(started).Milliseconds())
 			break
 		}
 		acked, err := survivor.Ack(ctx, "worker-b", msg)
 		if err != nil {
 			return err
 		}
-		fmt.Printf("worker-b dequeues %s, acks: %v\n", msg, acked)
+		fmt.Printf("worker-b dequeue %s, ack: %v\n", msg, acked)
 	}
-	return show("end")
+	return show("kết thúc")
 }

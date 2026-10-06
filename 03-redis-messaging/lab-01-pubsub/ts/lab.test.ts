@@ -4,12 +4,12 @@ import { eventually, uniqueName } from "@handbook/testkit";
 import { numSubscribers, publish, subscribe, type Subscription } from "./lab.js";
 
 const url = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
-// One connection for normal commands (PUBLISH, PUBSUB NUMSUB). Every subscriber gets its own.
+// Một connection cho các lệnh thường (PUBLISH, PUBSUB NUMSUB). Mỗi subscriber có connection riêng.
 const publisher = new Redis(url);
 const opened: Redis[] = [];
 const subscriptions: Subscription[] = [];
 
-/** A subscriber on a dedicated connection, closed again in afterEach. */
+/** Một subscriber trên connection riêng, được đóng lại trong afterEach. */
 async function newSubscriber(channel: string): Promise<Subscription> {
   const connection = new Redis(url);
   opened.push(connection);
@@ -31,25 +31,25 @@ describe("lab-01 pubsub: fire and forget", () => {
   it("subscriber_misses_messages_published_while_offline", async () => {
     const channel = uniqueName("lab03-offline");
 
-    // Nobody is subscribed: PUBLISH replies with the number of receivers, which is 0,
-    // and Redis does not keep the message anywhere.
+    // Chưa ai subscribe: PUBLISH trả về số receiver, tức là 0,
+    // và Redis không giữ message ở đâu cả.
     expect(await publish(publisher, channel, "offline-1")).toBe(0);
     expect(await publish(publisher, channel, "offline-2")).toBe(0);
     expect(await publish(publisher, channel, "offline-3")).toBe(0);
 
     const subscriber = await newSubscriber(channel);
-    // The subscribe confirmation is already in, and the server agrees: one subscriber.
+    // Xác nhận subscribe đã về, và server cũng đồng ý: có một subscriber.
     await eventually(async () => (await numSubscribers(publisher, channel)) === 1, {
       timeoutMs: 5000,
     });
 
-    // Now there is exactly one receiver, so this one is delivered.
+    // Giờ có đúng một receiver, nên message này được giao.
     expect(await publish(publisher, channel, "online-1")).toBe(1);
     await eventually(async () => subscriber.messages().length >= 1, { timeoutMs: 5000 });
 
-    // The three old messages never arrive: Pub/Sub has no history, the late subscriber only
-    // sees what is published after it subscribed. Order on one connection means a stray old
-    // message would have arrived before "online-1".
+    // Ba message cũ không bao giờ tới: Pub/Sub không có lịch sử, subscriber vào muộn chỉ
+    // thấy những gì được publish sau khi nó subscribe. Thứ tự trên một connection nghĩa là một
+    // message cũ lạc tới sẽ đến trước "online-1".
     expect(subscriber.messages()).toEqual(["online-1"]);
   });
 
@@ -67,13 +67,13 @@ describe("lab-01 pubsub: fire and forget", () => {
 
     const expected = Array.from({ length: total }, (_, i) => `msg-${i}`);
     for (const message of expected) {
-      // Fan-out: every PUBLISH reaches all 3 subscribers.
+      // Fan-out: mỗi PUBLISH tới cả 3 subscriber.
       expect(await publish(publisher, channel, message)).toBe(3);
     }
 
     for (const subscriber of subscribers) {
       await eventually(async () => subscriber.messages().length >= total, { timeoutMs: 5000 });
-      // Each subscriber got every message, in publish order, exactly once.
+      // Mỗi subscriber nhận đủ mọi message, theo thứ tự publish, đúng một lần.
       expect(subscriber.messages()).toEqual(expected);
     }
   });

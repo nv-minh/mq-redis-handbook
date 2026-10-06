@@ -1,4 +1,4 @@
-// Package lab shows Redis Pub/Sub: fire and forget fan-out with no history.
+// Package lab minh họa Redis Pub/Sub: fan-out kiểu gửi rồi quên, không có lịch sử.
 package lab
 
 import (
@@ -8,14 +8,14 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// Publish sends message on channel and returns the number of subscribers that received it.
-// 0 means nobody was listening and the message is gone: Pub/Sub keeps no history.
+// Publish gửi message lên channel và trả về số subscriber đã nhận được nó.
+// 0 nghĩa là không ai đang lắng nghe và message đã mất: Pub/Sub không giữ lịch sử.
 func Publish(ctx context.Context, rdb *redis.Client, channel, message string) (int64, error) {
 	return rdb.Publish(ctx, channel, message).Result()
 }
 
-// NumSubscribers returns the number of clients subscribed to channel with SUBSCRIBE
-// (PUBSUB NUMSUB). go-redis parses the reply into a map of channel to count.
+// NumSubscribers trả về số client đang subscribe channel bằng SUBSCRIBE
+// (PUBSUB NUMSUB). go-redis parse reply thành map từ channel sang số đếm.
 func NumSubscribers(ctx context.Context, rdb *redis.Client, channel string) (int64, error) {
 	counts, err := rdb.PubSubNumSub(ctx, channel).Result()
 	if err != nil {
@@ -24,7 +24,7 @@ func NumSubscribers(ctx context.Context, rdb *redis.Client, channel string) (int
 	return counts[channel], nil
 }
 
-// Subscription collects the messages that arrive on one channel.
+// Subscription gom các message tới trên một channel.
 type Subscription struct {
 	pubsub *redis.PubSub
 
@@ -33,13 +33,13 @@ type Subscription struct {
 	done     chan struct{}
 }
 
-// Subscribe opens a subscription on channel. go-redis gives every PubSub its own dedicated
-// connection, so it never shares a socket with the normal commands of rdb.
-// It waits for the subscribe confirmation before returning, so once it returns every later
-// Publish on the channel reaches this subscriber.
+// Subscribe mở một subscription trên channel. go-redis cấp cho mỗi PubSub một connection
+// riêng, nên nó không bao giờ dùng chung socket với các lệnh thường của rdb.
+// Hàm chờ xác nhận subscribe rồi mới return, nên khi hàm return, mọi Publish về sau
+// trên channel đều tới được subscriber này.
 func Subscribe(ctx context.Context, rdb *redis.Client, channel string) (*Subscription, error) {
 	pubsub := rdb.Subscribe(ctx, channel)
-	// The first Receive is the confirmation of the subscription (a *redis.Subscription).
+	// Receive đầu tiên là xác nhận của subscription (một *redis.Subscription).
 	if _, err := pubsub.Receive(ctx); err != nil {
 		_ = pubsub.Close()
 		return nil, err
@@ -57,14 +57,14 @@ func Subscribe(ctx context.Context, rdb *redis.Client, channel string) (*Subscri
 	return s, nil
 }
 
-// Messages returns the messages received so far, in arrival order.
+// Messages trả về các message đã nhận tới giờ, theo thứ tự đến.
 func (s *Subscription) Messages() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]string(nil), s.received...)
 }
 
-// Close unsubscribes and releases the dedicated connection.
+// Close hủy subscribe và giải phóng connection riêng.
 func (s *Subscription) Close() error {
 	err := s.pubsub.Close()
 	<-s.done

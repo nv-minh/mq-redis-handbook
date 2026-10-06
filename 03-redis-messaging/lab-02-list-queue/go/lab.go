@@ -1,5 +1,5 @@
-// Package lab implements a reliable queue on Redis lists: BLMOVE into a per-consumer processing
-// list, LREM to ack, and a recovery pass for consumers that died.
+// Package lab cài đặt queue đáng tin cậy trên Redis list: BLMOVE vào processing list riêng của từng
+// consumer, LREM để ack, và một lượt recovery cho các consumer đã chết.
 package lab
 
 import (
@@ -10,33 +10,33 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// Config wires a ReliableQueue.
+// Config nối các thành phần của một ReliableQueue.
 type Config struct {
-	// Commands runs the normal commands (LPUSH, LREM, LMOVE).
+	// Commands chạy các lệnh thường (LPUSH, LREM, LMOVE).
 	Commands *redis.Client
-	// Blocking runs only BLMOVE: a blocked connection cannot serve other commands, so keep it
-	// apart from Commands. go-redis keeps a pool per client, and one blocked BLMOVE holds a
-	// pooled connection until it returns.
+	// Blocking chỉ chạy BLMOVE: connection đang bị chặn không phục vụ được lệnh khác, nên hãy tách nó
+	// khỏi Commands. go-redis giữ một pool cho mỗi client, và một BLMOVE đang chặn giữ một
+	// connection của pool cho tới khi nó return.
 	Blocking *redis.Client
-	// Queue is the key of the queue list. Processing lists live under "<Queue>:processing:<consumerID>".
+	// Queue là key của list queue. Các processing list nằm dưới "<Queue>:processing:<consumerID>".
 	Queue string
-	// BlockTimeout is how long Dequeue waits on an empty queue. Zero would block forever, so
-	// NewReliableQueue replaces it with one second.
+	// BlockTimeout là thời gian Dequeue chờ trên queue rỗng. Giá trị 0 sẽ chặn vĩnh viễn, nên
+	// NewReliableQueue thay nó bằng một giây.
 	BlockTimeout time.Duration
 }
 
-// ReliableQueue is a queue where a message taken by a consumer is never lost until it is acked.
+// ReliableQueue là queue mà message do consumer lấy sẽ không bao giờ mất cho tới khi được ack.
 //
-// Enqueue: LPUSH (new messages enter at the left, consumers take from the right: FIFO).
-// Dequeue: BLMOVE queue processing RIGHT LEFT, one atomic step that takes the oldest message and
-// parks it in the consumer's processing list.
-// Ack: LREM from the processing list. RecoverStale: move a dead consumer's list back to the queue.
-// Delivery is at-least-once: a message recovered from a consumer that was only slow runs twice.
+// Enqueue: LPUSH (message mới vào bên trái, consumer lấy từ bên phải: FIFO).
+// Dequeue: BLMOVE queue processing RIGHT LEFT, một bước atomic vừa lấy message cũ nhất vừa
+// cất nó vào processing list của consumer.
+// Ack: LREM khỏi processing list. RecoverStale: chuyển list của consumer đã chết về lại queue.
+// Delivery là at-least-once: message được recover từ một consumer chỉ chậm chứ chưa chết sẽ chạy hai lần.
 type ReliableQueue struct {
 	cfg Config
 }
 
-// NewReliableQueue returns a queue for the given clients and keys.
+// NewReliableQueue trả về một queue cho các client và key đã cho.
 func NewReliableQueue(cfg Config) *ReliableQueue {
 	if cfg.BlockTimeout <= 0 {
 		cfg.BlockTimeout = time.Second
@@ -44,22 +44,22 @@ func NewReliableQueue(cfg Config) *ReliableQueue {
 	return &ReliableQueue{cfg: cfg}
 }
 
-// ProcessingKey is the list that holds the messages consumerID has taken but not acked.
+// ProcessingKey là list giữ các message mà consumerID đã lấy nhưng chưa ack.
 func (q *ReliableQueue) ProcessingKey(consumerID string) string {
 	return q.cfg.Queue + ":processing:" + consumerID
 }
 
-// Enqueue appends msg to the queue.
+// Enqueue thêm msg vào queue.
 func (q *ReliableQueue) Enqueue(ctx context.Context, msg string) error {
 	return q.cfg.Commands.LPush(ctx, q.cfg.Queue, msg).Err()
 }
 
-// Dequeue takes the oldest message, blocking up to BlockTimeout. ok is false (and err nil) when
-// the queue stayed empty for the whole timeout, which is BLMOVE replying nil. The message stays
-// in the processing list of consumerID until Ack.
+// Dequeue lấy message cũ nhất, chặn tối đa bằng BlockTimeout. ok là false (và err nil) khi
+// queue rỗng suốt thời gian timeout, tức là BLMOVE trả về nil. Message nằm trong processing
+// list của consumerID cho tới khi Ack.
 //
-// The typed BLMove command makes go-redis extend the socket read deadline by the block time, so
-// a client ReadTimeout shorter than BlockTimeout is fine here (a raw Do("BLMOVE", ...) is not).
+// Lệnh BLMove có kiểu khiến go-redis kéo dài read deadline của socket thêm đúng thời gian block, nên
+// ReadTimeout của client ngắn hơn BlockTimeout vẫn ổn ở đây (còn Do("BLMOVE", ...) thô thì không).
 func (q *ReliableQueue) Dequeue(ctx context.Context, consumerID string) (msg string, ok bool, err error) {
 	msg, err = q.cfg.Blocking.BLMove(ctx, q.cfg.Queue, q.ProcessingKey(consumerID), "RIGHT", "LEFT", q.cfg.BlockTimeout).Result()
 	if errors.Is(err, redis.Nil) {
@@ -71,19 +71,19 @@ func (q *ReliableQueue) Dequeue(ctx context.Context, consumerID string) (msg str
 	return msg, true, nil
 }
 
-// Ack removes msg from the processing list of consumerID. It returns false if msg was not there.
+// Ack xóa msg khỏi processing list của consumerID. Hàm trả về false nếu msg không có ở đó.
 func (q *ReliableQueue) Ack(ctx context.Context, consumerID, msg string) (bool, error) {
 	n, err := q.cfg.Commands.LRem(ctx, q.ProcessingKey(consumerID), 1, msg).Result()
 	return n == 1, err
 }
 
-// RecoverStale puts every message in the processing list of consumerID back on the queue and
-// returns how many it moved (0 for an empty list). Call it for a consumer you know is dead.
+// RecoverStale đưa mọi message trong processing list của consumerID về lại queue và
+// trả về số message đã chuyển (0 nếu list rỗng). Gọi hàm này cho consumer mà bạn biết đã chết.
 //
-// Each LMOVE is atomic, so a crash of the recovering process cannot lose a message.
-// LEFT to RIGHT: the processing list holds the newest message at its left end, so moving from
-// its left end to the right end of the queue (the end consumers read from) leaves the oldest
-// message pushed last, therefore consumed first again: original order kept.
+// Mỗi LMOVE là atomic, nên tiến trình recover có crash cũng không làm mất message.
+// LEFT sang RIGHT: processing list giữ message mới nhất ở đầu bên trái, nên chuyển từ đầu bên trái
+// của nó sang đầu bên phải của queue (đầu mà consumer đọc) khiến message cũ nhất được push
+// sau cùng, do đó được consume đầu tiên trở lại: giữ nguyên thứ tự ban đầu.
 func (q *ReliableQueue) RecoverStale(ctx context.Context, consumerID string) (int64, error) {
 	var moved int64
 	for {

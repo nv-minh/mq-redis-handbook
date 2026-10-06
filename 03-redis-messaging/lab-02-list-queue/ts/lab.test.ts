@@ -4,7 +4,7 @@ import { eventually, uniqueName } from "@handbook/testkit";
 import { ReliableQueue } from "./lab.js";
 
 const url = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
-// One connection for normal commands. Every consumer gets its own connection for BLMOVE.
+// Một connection cho các lệnh thường. Mỗi consumer có connection riêng cho BLMOVE.
 const redis = new Redis(url);
 const blockingConnections: Redis[] = [];
 const blockingOf = new WeakMap<ReliableQueue, Redis>();
@@ -17,9 +17,9 @@ function newQueueKey(): string {
   return key;
 }
 
-/** One consumer-side queue object: shared commands connection, its own blocking connection. */
+/** Một đối tượng queue phía consumer: connection lệnh dùng chung, connection blocking riêng. */
 function newQueue(queueKey: string, blockTimeoutSeconds = 1): ReliableQueue {
-  // A unique connection name lets a test find exactly this connection in CLIENT LIST.
+  // Tên connection duy nhất giúp test tìm đúng connection này trong CLIENT LIST.
   const connectionName = uniqueName("lab03-blocking");
   const blocking = new Redis(url, { connectionName });
   blockingConnections.push(blocking);
@@ -29,12 +29,12 @@ function newQueue(queueKey: string, blockTimeoutSeconds = 1): ReliableQueue {
   return queue;
 }
 
-/** Simulate a crash: the consumer vanishes without acking and its connection is dropped. */
+/** Mô phỏng crash: consumer biến mất mà không ack và connection của nó bị cắt. */
 function crash(queue: ReliableQueue): void {
   blockingOf.get(queue)?.disconnect();
 }
 
-/** The processing lists of the consumers a test used are keyed under the queue key. */
+/** Các processing list của consumer mà test dùng có key nằm dưới key của queue. */
 function registerProcessingKeys(queue: ReliableQueue, ...consumerIds: string[]): void {
   for (const id of consumerIds) createdKeys.push(queue.processingKey(id));
 }
@@ -58,11 +58,11 @@ describe("lab-02 list queue: reliable queue with BLMOVE", () => {
 
     expect(await queue.dequeue("worker-1")).toBe("job-1");
 
-    // BLMOVE moved the message atomically: gone from the queue, parked in the processing list.
+    // BLMOVE chuyển message một cách atomic: biến khỏi queue, được cất trong processing list.
     expect(await redis.lrange(queueKey, 0, -1)).toEqual([]);
     expect(await redis.lrange(queue.processingKey("worker-1"), 0, -1)).toEqual(["job-1"]);
 
-    // Only the ack removes it from the processing list.
+    // Chỉ có ack mới xóa nó khỏi processing list.
     expect(await queue.ack("worker-1", "job-1")).toBe(true);
     expect(await redis.lrange(queue.processingKey("worker-1"), 0, -1)).toEqual([]);
   });
@@ -74,17 +74,17 @@ describe("lab-02 list queue: reliable queue with BLMOVE", () => {
     registerProcessingKeys(survivor, "worker-a", "worker-b");
     await survivor.enqueue("job-1");
 
-    // worker-a takes the message and "crashes": it never acks, and its connection is dropped.
+    // worker-a lấy message rồi "crash": nó không bao giờ ack, và connection của nó bị cắt.
     expect(await crashing.dequeue("worker-a")).toBe("job-1");
     crash(crashing);
     expect(await redis.lrange(survivor.processingKey("worker-a"), 0, -1)).toEqual(["job-1"]);
     expect(await redis.lrange(queueKey, 0, -1)).toEqual([]);
 
-    // A recovery pass puts the dead consumer's message back on the queue.
+    // Một lượt recovery đưa message của consumer đã chết về lại queue.
     expect(await survivor.recoverStale("worker-a")).toBe(1);
     expect(await redis.lrange(survivor.processingKey("worker-a"), 0, -1)).toEqual([]);
 
-    // Another consumer now receives the very same message: at-least-once delivery.
+    // Một consumer khác giờ nhận đúng message đó: at-least-once delivery.
     expect(await survivor.dequeue("worker-b")).toBe("job-1");
     expect(await survivor.ack("worker-b", "job-1")).toBe(true);
     expect(await redis.lrange(queueKey, 0, -1)).toEqual([]);
@@ -99,8 +99,8 @@ describe("lab-02 list queue: reliable queue with BLMOVE", () => {
     expect(await queue.dequeue("worker-1")).toBeNull();
     const waitedMs = Date.now() - started;
 
-    // BLMOVE really blocked for about the timeout (it cannot return earlier on an empty list),
-    // and an empty result leaves nothing in the processing list.
+    // BLMOVE thực sự đã chặn khoảng bằng timeout (nó không thể return sớm hơn trên list rỗng),
+    // và kết quả rỗng không để lại gì trong processing list.
     expect(waitedMs).toBeGreaterThanOrEqual(900);
     expect(await redis.lrange(queue.processingKey("worker-1"), 0, -1)).toEqual([]);
   });
@@ -111,13 +111,13 @@ describe("lab-02 list queue: reliable queue with BLMOVE", () => {
     registerProcessingKeys(queue, "worker-1");
 
     const pending = queue.dequeue("worker-1");
-    // Wait until the server reports THIS connection as blocked in BLMOVE (flags=b in CLIENT LIST).
+    // Chờ tới khi server báo CHÍNH connection này đang bị chặn trong BLMOVE (flags=b trong CLIENT LIST).
     await eventually(async () => isBlockedInBlmove(connectionNameOf.get(queue) as string), {
       timeoutMs: 5000,
     });
 
     await queue.enqueue("late-job");
-    // The push wakes the blocked client right away, long before the 10 second timeout.
+    // Lệnh push đánh thức client đang bị chặn ngay lập tức, rất lâu trước timeout 10 giây.
     expect(await pending).toBe("late-job");
   });
 
@@ -160,7 +160,7 @@ describe("lab-02 list queue: reliable queue with BLMOVE", () => {
   });
 });
 
-/** True when the client named `connectionName` is currently blocked in BLMOVE, per CLIENT LIST. */
+/** True khi client tên `connectionName` đang bị chặn trong BLMOVE, theo CLIENT LIST. */
 async function isBlockedInBlmove(connectionName: string): Promise<boolean> {
   const list = (await redis.client("LIST")) as string;
   return list

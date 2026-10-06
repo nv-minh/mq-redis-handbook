@@ -1,5 +1,5 @@
-// Package testkit holds the helpers every lab test uses: wait for a broker port,
-// generate collision-free resource names, and poll instead of sleeping.
+// Package testkit chứa các helper mà mọi test của lab dùng: chờ port của broker,
+// sinh tên resource không đụng nhau, và poll thay vì sleep.
 package testkit
 
 import (
@@ -12,8 +12,8 @@ import (
 
 const pollInterval = 100 * time.Millisecond
 
-// WaitForPort blocks until a TCP listener accepts connections on addr, or fails the test
-// with addr and the last dial error once timeout elapses. It never hangs.
+// WaitForPort chặn tới khi một TCP listener nhận kết nối trên addr, hoặc làm test fail
+// kèm addr và lỗi dial gần nhất khi hết timeout. Hàm không bao giờ treo.
 func WaitForPort(t testing.TB, addr string, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -31,14 +31,14 @@ func WaitForPort(t testing.TB, addr string, timeout time.Duration) {
 		lastErr = err
 		time.Sleep(min(pollInterval, max(time.Until(deadline), 0)))
 	}
-	t.Fatalf("timed out after %s waiting for %s (last error: %v). Is Docker running and the service up? Try: make up",
+	t.Fatalf("hết %s vẫn chưa kết nối được tới %s (lỗi gần nhất: %v). Docker đã chạy và service đã lên chưa? Thử: make up",
 		timeout, addr, lastErr)
 }
 
 const alphabet = "0123456789abcdefghijklmnopqrstuvwxyz"
 
-// UniqueName returns prefix-<time base36>-<6 random chars>, so re-running a lab on a dirty
-// broker never collides with keys, queues or topics left by an earlier run.
+// UniqueName trả về prefix-<time base36>-<6 ký tự ngẫu nhiên>, để chạy lại lab trên broker
+// còn dữ liệu cũ không bao giờ đụng key, queue hay topic mà lần chạy trước để lại.
 func UniqueName(prefix string) string {
 	buf := make([]byte, 6)
 	if _, err := rand.Read(buf); err != nil {
@@ -50,8 +50,8 @@ func UniqueName(prefix string) string {
 	return prefix + "-" + strconv.FormatInt(time.Now().UnixMilli(), 36) + "-" + string(buf)
 }
 
-// Eventually polls fn every 100ms until it reports ok, then returns its value.
-// It fails the test if timeout elapses first. Use this instead of fixed sleeps.
+// Eventually poll fn mỗi 100ms tới khi fn báo ok rồi trả về giá trị của nó.
+// Hàm làm test fail nếu hết timeout trước. Dùng hàm này thay cho sleep cố định.
 func Eventually[T any](t testing.TB, timeout time.Duration, fn func() (T, bool)) T {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -60,7 +60,7 @@ func Eventually[T any](t testing.TB, timeout time.Duration, fn func() (T, bool))
 			return v
 		}
 		if !time.Now().Before(deadline) {
-			t.Fatalf("eventually: condition not met within %s", timeout)
+			t.Fatalf("eventually: điều kiện chưa đạt sau %s", timeout)
 		}
 		time.Sleep(min(pollInterval, max(time.Until(deadline), 0)))
 	}

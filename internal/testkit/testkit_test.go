@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-// fakeTB records Fatalf calls instead of aborting the test, so failure paths can be asserted.
-// FailNow panics with a sentinel so that Fatalf keeps its "does not return" behavior.
+// fakeTB ghi lại các lần gọi Fatalf thay vì dừng test, để có thể assert đường lỗi.
+// FailNow panic bằng một sentinel để Fatalf giữ hành vi "không return".
 type fakeTB struct {
 	testing.TB
 	fatal string
@@ -28,7 +28,7 @@ func (f *fakeTB) Fatalf(format string, args ...any) {
 
 func (f *fakeTB) Logf(format string, args ...any) {}
 
-// runFatal runs fn and returns the recorded Fatalf message ("" if fn returned normally).
+// runFatal chạy fn và trả về message Fatalf đã ghi lại ("" nếu fn return bình thường).
 func runFatal(f *fakeTB, fn func()) (msg string) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -64,13 +64,13 @@ func TestWaitForPortFailsWithAddrInMessage(t *testing.T) {
 	msg := runFatal(fake, func() { WaitForPort(fake, addr, 300*time.Millisecond) })
 
 	if msg == "" {
-		t.Fatal("expected WaitForPort to call Fatalf on a closed port")
+		t.Fatal("mong đợi WaitForPort gọi Fatalf trên port đã đóng")
 	}
 	if !strings.Contains(msg, "127.0.0.1:") || !strings.Contains(msg, port) {
-		t.Fatalf("message %q should contain %q", msg, addr)
+		t.Fatalf("message %q phải chứa %q", msg, addr)
 	}
 	if elapsed := time.Since(start); elapsed > 3*time.Second {
-		t.Fatalf("WaitForPort hung for %s, expected to fail fast", elapsed)
+		t.Fatalf("WaitForPort bị treo %s, mong đợi nó fail nhanh", elapsed)
 	}
 }
 
@@ -92,18 +92,18 @@ func TestWaitForPortSucceedsWhenListenerOpens(t *testing.T) {
 	if l, ok := <-done; ok {
 		_ = l.Close()
 	} else {
-		t.Fatal("listener failed to open")
+		t.Fatal("listener không mở được")
 	}
 }
 
 func TestUniqueNameDiffers(t *testing.T) {
 	a, b := UniqueName("orders"), UniqueName("orders")
 	if a == b {
-		t.Fatalf("expected different names, got %q twice", a)
+		t.Fatalf("mong đợi hai tên khác nhau, nhận %q hai lần", a)
 	}
 	for _, n := range []string{a, b} {
 		if !strings.HasPrefix(n, "orders-") {
-			t.Fatalf("name %q should start with prefix", n)
+			t.Fatalf("tên %q phải bắt đầu bằng prefix", n)
 		}
 	}
 }
@@ -117,7 +117,7 @@ func TestEventuallyReturnsValue(t *testing.T) {
 		return "", false
 	})
 	if got != "ready-3" {
-		t.Fatalf("got %q", got)
+		t.Fatalf("nhận %q", got)
 	}
 }
 
@@ -127,6 +127,6 @@ func TestEventuallyFailsAfterTimeout(t *testing.T) {
 		Eventually(fake, 200*time.Millisecond, func() (int, bool) { return 0, false })
 	})
 	if msg == "" {
-		t.Fatal("expected Eventually to call Fatalf after timeout")
+		t.Fatal("mong đợi Eventually gọi Fatalf sau timeout")
 	}
 }

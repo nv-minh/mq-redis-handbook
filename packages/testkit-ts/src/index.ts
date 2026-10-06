@@ -12,7 +12,7 @@ function tryConnect(host: string, port: number, timeoutMs: number): Promise<void
       socket.destroy();
       reject(error);
     };
-    socket.setTimeout(timeoutMs, () => fail(new Error("connect attempt timed out")));
+    socket.setTimeout(timeoutMs, () => fail(new Error("lần kết nối bị timeout")));
     socket.once("error", fail);
     socket.once("connect", () => {
       socket.destroy();
@@ -22,12 +22,12 @@ function tryConnect(host: string, port: number, timeoutMs: number): Promise<void
 }
 
 /**
- * Wait until a TCP listener accepts connections on host:port.
- * Rejects (never hangs) after timeoutMs, with host:port and the last error in the message.
+ * Chờ tới khi một TCP listener nhận kết nối trên host:port.
+ * Reject (không bao giờ treo) sau timeoutMs, message có host:port và lỗi gần nhất.
  */
 export async function waitForPort(host: string, port: number, timeoutMs: number): Promise<void> {
   const deadline = Date.now() + timeoutMs;
-  let lastError = "no connection attempt made";
+  let lastError = "chưa thử kết nối lần nào";
   for (;;) {
     const remaining = deadline - Date.now();
     if (remaining <= 0) break;
@@ -40,14 +40,14 @@ export async function waitForPort(host: string, port: number, timeoutMs: number)
     await sleep(Math.min(DEFAULT_INTERVAL_MS, Math.max(0, deadline - Date.now())));
   }
   throw new Error(
-    `timed out after ${timeoutMs}ms waiting for ${host}:${port} (last error: ${lastError}). ` +
-      "Is Docker running and the service up? Try: make up",
+    `hết ${timeoutMs}ms vẫn chưa kết nối được tới ${host}:${port} (lỗi gần nhất: ${lastError}). ` +
+      "Docker đã chạy và service đã lên chưa? Thử: make up",
   );
 }
 
 /**
- * Unique resource name per call, so re-running a lab on a dirty broker never collides
- * with keys, queues or topics left by an earlier run.
+ * Tên resource duy nhất cho mỗi lần gọi, để chạy lại lab trên broker còn dữ liệu cũ
+ * không bao giờ đụng key, queue hay topic mà lần chạy trước để lại.
  */
 export function uniqueName(prefix: string): string {
   const time = Date.now().toString(36);
@@ -60,8 +60,8 @@ export function uniqueName(prefix: string): string {
 }
 
 /**
- * Poll fn until it returns something other than undefined or false (a thrown error counts as
- * "not yet"). Rejects after timeoutMs with the last error. Use this instead of fixed sleeps.
+ * Poll fn tới khi nó trả về giá trị khác undefined và false (ném lỗi được tính là
+ * "chưa xong"). Reject sau timeoutMs kèm lỗi gần nhất. Dùng hàm này thay cho sleep cố định.
  */
 export async function eventually<T>(
   fn: () => Promise<T | undefined | false>,
@@ -83,9 +83,9 @@ export async function eventually<T>(
   }
   const detail =
     lastError === undefined
-      ? "condition never became true"
-      : `last error: ${lastError instanceof Error ? lastError.message : String(lastError)}`;
-  throw new Error(`eventually timed out after ${opts.timeoutMs}ms (${detail})`, {
+      ? "điều kiện chưa bao giờ đúng"
+      : `lỗi gần nhất: ${lastError instanceof Error ? lastError.message : String(lastError)}`;
+  throw new Error(`eventually hết ${opts.timeoutMs}ms mà điều kiện chưa đạt (${detail})`, {
     cause: lastError,
   });
 }

@@ -129,7 +129,7 @@ describe("lab-03 safety guard", () => {
   it("guard_refuses_a_redis_without_the_handbook_marker_and_changes_nothing", async () => {
     const before = await readConfig(redis);
     await expect(assertOwnRedis(redis, "some-other-marker.rdb")).rejects.toThrow(
-      /refusing to run.*not the handbook marker/,
+      /từ chối chạy.*không phải marker của handbook/,
     );
     expect(await readConfig(redis)).toEqual(before); // chỉ đọc: không có CONFIG SET nào xảy ra
   });

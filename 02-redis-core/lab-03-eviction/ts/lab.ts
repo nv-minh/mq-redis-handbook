@@ -162,10 +162,10 @@ export interface ServerState {
 /** Kiểm tra thuần: vì sao lab không được dùng server này, hoặc null khi an toàn. */
 export function guardProblem(state: ServerState, marker: string): string | null {
   if (state.dbfilename !== marker) {
-    return `refusing to run: this Redis reports dbfilename "${state.dbfilename}", not the handbook marker "${marker}", so it is not the compose Redis of this repo (REDIS_URL points elsewhere?). Nothing was changed.`;
+    return `từ chối chạy: Redis này báo dbfilename "${state.dbfilename}", không phải marker của handbook "${marker}", nên đây không phải Redis compose của repo này (REDIS_URL đang trỏ tới nơi khác?). Chưa thay đổi gì.`;
   }
   if (state.maxmemory !== "0" || state.policy !== "noeviction") {
-    return `refusing to run: maxmemory=${state.maxmemory} policy=${state.policy} is not pristine (maxmemory 0, noeviction). Leftover config from an earlier run, run \`make down && make up\`. Nothing was changed.`;
+    return `từ chối chạy: maxmemory=${state.maxmemory} policy=${state.policy} không còn nguyên vẹn (maxmemory 0, noeviction). Config còn sót từ lần chạy trước, hãy chạy \`make down && make up\`. Chưa thay đổi gì.`;
   }
   return null;
 }

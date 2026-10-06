@@ -231,10 +231,10 @@ type ServerState struct {
 // GuardProblem là phép kiểm tra thuần: vì sao lab không được dùng server này, hoặc "" khi an toàn.
 func GuardProblem(s ServerState, marker string) string {
 	if s.DBFilename != marker {
-		return fmt.Sprintf("refusing to run: this Redis reports dbfilename %q, not the handbook marker %q, so it is not the compose Redis of this repo (REDIS_URL points elsewhere?). Nothing was changed.", s.DBFilename, marker)
+		return fmt.Sprintf("từ chối chạy: Redis này báo dbfilename %q, không phải marker của handbook %q, nên đây không phải Redis compose của repo này (REDIS_URL đang trỏ tới nơi khác?). Chưa thay đổi gì.", s.DBFilename, marker)
 	}
 	if s.Maxmemory != "0" || s.Policy != "noeviction" {
-		return fmt.Sprintf("refusing to run: maxmemory=%s policy=%s is not pristine (maxmemory 0, noeviction). Leftover config from an earlier run, run `make down && make up`. Nothing was changed.", s.Maxmemory, s.Policy)
+		return fmt.Sprintf("từ chối chạy: maxmemory=%s policy=%s không còn nguyên vẹn (maxmemory 0, noeviction). Config còn sót từ lần chạy trước, hãy chạy `make down && make up`. Chưa thay đổi gì.", s.Maxmemory, s.Policy)
 	}
 	return ""
 }

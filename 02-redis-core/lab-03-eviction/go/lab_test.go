@@ -212,7 +212,7 @@ func TestGuardRefusesARedisWithoutTheHandbookMarkerAndChangesNothing(t *testing.
 		t.Fatal(err)
 	}
 	err = AssertOwnRedis(ctx, rdb, "some-other-marker.rdb")
-	if err == nil || !strings.Contains(err.Error(), "not the handbook marker") {
+	if err == nil || !strings.Contains(err.Error(), "không phải marker của handbook") {
 		t.Fatalf("AssertOwnRedis = %v, mong đợi lời từ chối nêu rõ marker", err)
 	}
 	if after, _ := ReadConfig(ctx, rdb); after != before { // chỉ đọc: không có CONFIG SET nào xảy ra

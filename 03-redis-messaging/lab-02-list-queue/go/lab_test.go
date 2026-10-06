@@ -3,9 +3,8 @@ package lab
 import (
 	"context"
 	"os"
-	"regexp"
 	"slices"
-	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -31,11 +30,13 @@ type env struct {
 	t        *testing.T
 	commands *redis.Client
 	keys     []string
+	// connectionNames maps a queue to the unique CLIENT SETNAME of its blocking connections.
+	connectionNames map[*ReliableQueue]string
 }
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
-	e := &env{t: t, commands: redis.NewClient(redisOptions(t))}
+	e := &env{t: t, commands: redis.NewClient(redisOptions(t)), connectionNames: map[*ReliableQueue]string{}}
 	t.Cleanup(func() {
 		if len(e.keys) > 0 {
 			e.commands.Del(context.Background(), e.keys...)
@@ -54,9 +55,17 @@ func (e *env) queueKey() string {
 // newQueue builds one consumer-side queue: shared commands client, its own blocking client.
 func (e *env) newQueue(queueKey string, blockTimeout time.Duration, consumerIDs ...string) (*ReliableQueue, *redis.Client) {
 	e.t.Helper()
-	blocking := redis.NewClient(redisOptions(e.t))
+	// A unique connection name lets a test find exactly this connection in CLIENT LIST.
+	// Every connection of the pool runs CLIENT SETNAME when it is opened.
+	name := testkit.UniqueName("lab03-blocking")
+	opts := redisOptions(e.t)
+	opts.OnConnect = func(ctx context.Context, conn *redis.Conn) error {
+		return conn.ClientSetName(ctx, name).Err()
+	}
+	blocking := redis.NewClient(opts)
 	e.t.Cleanup(func() { _ = blocking.Close() })
 	queue := NewReliableQueue(Config{Commands: e.commands, Blocking: blocking, Queue: queueKey, BlockTimeout: blockTimeout})
+	e.connectionNames[queue] = name
 	for _, id := range consumerIDs {
 		e.keys = append(e.keys, queue.ProcessingKey(id))
 	}
@@ -88,21 +97,26 @@ func assertList(t *testing.T, what string, got, want []string) {
 	}
 }
 
-var blockedRe = regexp.MustCompile(`blocked_clients:(\d+)`)
-
-// blockedClients reads blocked_clients from INFO: clients waiting in a blocking command.
-func blockedClients(t *testing.T, rdb *redis.Client) int {
+// isBlockedInBlmove reports whether a client named connectionName is blocked in BLMOVE right
+// now, according to CLIENT LIST (flags contain "b", cmd is blmove).
+func isBlockedInBlmove(t *testing.T, rdb *redis.Client, connectionName string) bool {
 	t.Helper()
-	info, err := rdb.Info(context.Background(), "clients").Result()
+	list, err := rdb.ClientList(context.Background()).Result()
 	if err != nil {
-		t.Fatalf("INFO clients: %v", err)
+		t.Fatalf("CLIENT LIST: %v", err)
 	}
-	match := blockedRe.FindStringSubmatch(info)
-	if match == nil {
-		return 0
+	for _, line := range strings.Split(list, "\n") {
+		fields := map[string]string{}
+		for _, field := range strings.Fields(line) {
+			if key, value, ok := strings.Cut(field, "="); ok {
+				fields[key] = value
+			}
+		}
+		if fields["name"] == connectionName && strings.Contains(fields["flags"], "b") && fields["cmd"] == "blmove" {
+			return true
+		}
 	}
-	n, _ := strconv.Atoi(match[1])
-	return n
+	return false
 }
 
 func TestMessageStaysInProcessingListUntilAck(t *testing.T) {
@@ -191,7 +205,6 @@ func TestBlockedDequeueWakesUpWhenAMessageArrives(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
 	queue, _ := e.newQueue(e.queueKey(), 10*time.Second, "worker-1")
-	blockedBefore := blockedClients(t, e.commands)
 
 	type result struct {
 		msg string
@@ -203,9 +216,9 @@ func TestBlockedDequeueWakesUpWhenAMessageArrives(t *testing.T) {
 		msg, ok, err := queue.Dequeue(ctx, "worker-1")
 		done <- result{msg, ok, err}
 	}()
-	// Wait until the server reports one more blocked client: BLMOVE is parked on the empty list.
+	// Wait until the server reports THIS connection as blocked in BLMOVE (flags=b in CLIENT LIST).
 	testkit.Eventually(t, 5*time.Second, func() (struct{}, bool) {
-		return struct{}{}, blockedClients(t, e.commands) > blockedBefore
+		return struct{}{}, isBlockedInBlmove(t, e.commands, e.connectionNames[queue])
 	})
 
 	if err := queue.Enqueue(ctx, "late-job"); err != nil {

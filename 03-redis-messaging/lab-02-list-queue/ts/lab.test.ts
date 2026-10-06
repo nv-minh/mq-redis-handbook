@@ -8,6 +8,7 @@ const url = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
 const redis = new Redis(url);
 const blockingConnections: Redis[] = [];
 const blockingOf = new WeakMap<ReliableQueue, Redis>();
+const connectionNameOf = new WeakMap<ReliableQueue, string>();
 const createdKeys: string[] = [];
 
 function newQueueKey(): string {
@@ -18,10 +19,13 @@ function newQueueKey(): string {
 
 /** One consumer-side queue object: shared commands connection, its own blocking connection. */
 function newQueue(queueKey: string, blockTimeoutSeconds = 1): ReliableQueue {
-  const blocking = new Redis(url);
+  // A unique connection name lets a test find exactly this connection in CLIENT LIST.
+  const connectionName = uniqueName("lab03-blocking");
+  const blocking = new Redis(url, { connectionName });
   blockingConnections.push(blocking);
   const queue = new ReliableQueue({ redis, blocking, queue: queueKey, blockTimeoutSeconds });
   blockingOf.set(queue, blocking);
+  connectionNameOf.set(queue, connectionName);
   return queue;
 }
 
@@ -105,11 +109,12 @@ describe("lab-02 list queue: reliable queue with BLMOVE", () => {
     const queueKey = newQueueKey();
     const queue = newQueue(queueKey, 10);
     registerProcessingKeys(queue, "worker-1");
-    const blockedBefore = await blockedClients();
 
     const pending = queue.dequeue("worker-1");
-    // Wait until the server reports one more blocked client: BLMOVE is parked on the empty list.
-    await eventually(async () => (await blockedClients()) > blockedBefore, { timeoutMs: 5000 });
+    // Wait until the server reports THIS connection as blocked in BLMOVE (flags=b in CLIENT LIST).
+    await eventually(async () => isBlockedInBlmove(connectionNameOf.get(queue) as string), {
+      timeoutMs: 5000,
+    });
 
     await queue.enqueue("late-job");
     // The push wakes the blocked client right away, long before the 10 second timeout.
@@ -155,9 +160,15 @@ describe("lab-02 list queue: reliable queue with BLMOVE", () => {
   });
 });
 
-/** `blocked_clients` from INFO: clients currently waiting in a blocking command. */
-async function blockedClients(): Promise<number> {
-  const info = await redis.info("clients");
-  const match = /blocked_clients:(\d+)/.exec(info);
-  return match ? Number(match[1]) : 0;
+/** True when the client named `connectionName` is currently blocked in BLMOVE, per CLIENT LIST. */
+async function isBlockedInBlmove(connectionName: string): Promise<boolean> {
+  const list = (await redis.client("LIST")) as string;
+  return list
+    .split("\n")
+    .some(
+      (line) =>
+        line.includes(` name=${connectionName} `) &&
+        / flags=\S*b\S* /.test(line) &&
+        line.includes(" cmd=blmove"),
+    );
 }

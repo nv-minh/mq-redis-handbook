@@ -117,18 +117,20 @@ make lab-go LAB=03-redis-messaging/lab-02-list-queue
 
 Test (cùng tên ở TS và Go, Go dùng CamelCase):
 
-| Test                                                          | Chứng minh                                                                                                                         |
-| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `message_stays_in_processing_list_until_ack`                  | Sau `dequeue`: `LRANGE queue` rỗng và `LRANGE processing:<id>` còn message. Sau `ack`: processing list rỗng                        |
-| `message_is_recovered_after_consumer_crash`                   | Consumer A dequeue rồi crash không ack, `recoverStale(A)` trả `1`, consumer B nhận lại đúng message và ack được                    |
-| `dequeue_on_empty_queue_returns_null_after_the_block_timeout` | Queue rỗng: `dequeue` trả `null` sau khi block khoảng 1 giây, không để lại gì trong processing list                                |
-| `blocked_dequeue_wakes_up_when_a_message_arrives`             | `dequeue` đang block (server báo thêm một `blocked_clients`) được đánh thức ngay khi `enqueue`, không phải chờ hết timeout 10 giây |
-| `messages_are_delivered_in_fifo_order`                        | Enqueue `a`, `b`, `c` thì dequeue ra đúng thứ tự `a`, `b`, `c`                                                                     |
-| `recover_stale_on_empty_processing_list_returns_zero`         | Processing list rỗng hoặc không tồn tại: `recoverStale` trả `0`                                                                    |
-| `recovered_messages_are_redelivered_in_their_original_order`  | Ba message của consumer chết được giao lại theo thứ tự `a`, `b`, `c`                                                               |
-| `ack_of_a_message_not_in_the_processing_list_returns_false`   | Ack message không có trong processing list trả `false`                                                                             |
+| Test                                                          | Chứng minh                                                                                                                                                     |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `message_stays_in_processing_list_until_ack`                  | Sau `dequeue`: `LRANGE queue` rỗng và `LRANGE processing:<id>` còn message. Sau `ack`: processing list rỗng                                                    |
+| `message_is_recovered_after_consumer_crash`                   | Consumer A dequeue rồi crash không ack, `recoverStale(A)` trả `1`, consumer B nhận lại đúng message và ack được                                                |
+| `dequeue_on_empty_queue_returns_null_after_the_block_timeout` | Queue rỗng: `dequeue` trả `null` sau khi block khoảng 1 giây, không để lại gì trong processing list                                                            |
+| `blocked_dequeue_wakes_up_when_a_message_arrives`             | `dequeue` đang block (`CLIENT LIST` báo đúng connection đó có `flags=b` và `cmd=blmove`) được đánh thức ngay khi `enqueue`, không phải chờ hết timeout 10 giây |
+| `messages_are_delivered_in_fifo_order`                        | Enqueue `a`, `b`, `c` thì dequeue ra đúng thứ tự `a`, `b`, `c`                                                                                                 |
+| `recover_stale_on_empty_processing_list_returns_zero`         | Processing list rỗng hoặc không tồn tại: `recoverStale` trả `0`                                                                                                |
+| `recovered_messages_are_redelivered_in_their_original_order`  | Ba message của consumer chết được giao lại theo thứ tự `a`, `b`, `c`                                                                                           |
+| `ack_of_a_message_not_in_the_processing_list_returns_false`   | Ack message không có trong processing list trả `false`                                                                                                         |
 
 Không test nào dùng sleep cố định: test chờ bằng `eventually` hoặc dựa vào timeout của chính `BLMOVE`.
+Mỗi connection blocking của test có tên riêng (`CLIENT SETNAME`), nên test tìm đúng connection của mình trong `CLIENT LIST`.
+Cách đếm `blocked_clients` toàn server không dùng được vì các test và package khác có thể đang block cùng lúc (lỗi flaky đã gặp khi chạy song song nhiều package).
 Việc giả lập crash là bỏ object consumer và đóng connection blocking của nó sau khi dequeue mà không ack.
 
 Demo in trạng thái ba list sau mỗi bước: enqueue, `worker-a` dequeue và giữ `job-1`, crash, `recoverStale` chuyển `1` message về queue, `worker-b` xử lý hết rồi dequeue trên queue rỗng trả `null` sau khoảng 1 giây.

@@ -29,6 +29,8 @@
   },
   "dependencies": {
     "@confluentinc/kafka-javascript": "1.10.1",
+    "@nats-io/jetstream": "3.4.0",
+    "@nats-io/transport-node": "3.4.0",
     "amqplib": "2.2.0",
     "ioredis": "6.0.0"
   }

@@ -226,7 +226,24 @@ func run() (err error) {
 	fmt.Printf("trạng thái: %s\n", d.trail(badID))
 	fmt.Printf("kho còn %s: 3 sản phẩm đã được giữ rồi trả lại (compensation)\n\n", d.stock())
 
-	fmt.Println("== 3. Event bị giao trùng: consumer dedupe theo eventId trong cùng transaction với effect ==")
+	fmt.Println("== 3. Hết hàng (order cần 20, kho chỉ còn vài sản phẩm): inventory từ chối và hủy order ==")
+	status, out, err = d.post(map[string]any{"amount": 100, "sku": sku, "quantity": 20})
+	if err != nil {
+		return err
+	}
+	bigID, _ := out["id"].(string)
+	fmt.Printf("POST /orders -> %d, id %s\n", status, bigID)
+	if err := waitFor(30*time.Second, func() (bool, error) {
+		return d.text("select status from orders where id = $1", bigID) == "cancelled", nil
+	}); err != nil {
+		return err
+	}
+	fmt.Printf("trạng thái: %s\n", d.trail(bigID))
+	fmt.Printf("kho vẫn còn %s, reservation: %s\n", d.stock(), d.text("select status from reservations where order_id = $1", bigID))
+	fmt.Printf("payment của order bị hủy: %s (giới hạn đã biết: payment chạy song song và use case không có bước hoàn tiền)\n\n",
+		d.text("select status from payments where order_id = $1", bigID))
+
+	fmt.Println("== 4. Event bị giao trùng: consumer dedupe theo eventId trong cùng transaction với effect ==")
 	var eventID string
 	var payload []byte
 	if err := pool.QueryRow(ctx, "select event_id, payload from outbox where aggregate_id = $1 and type = 'OrderPlaced'", okID).Scan(&eventID, &payload); err != nil {
@@ -250,7 +267,7 @@ func run() (err error) {
 	fmt.Println("effect vẫn chỉ áp dụng một lần.")
 	fmt.Println()
 
-	fmt.Println("== 4. Lag của consumer group trên /metrics ==")
+	fmt.Println("== 5. Lag của consumer group trên /metrics ==")
 	lagOf := func(name string) float64 {
 		return d.metric("consumer_group_lag", map[string]string{"group": svc.GroupID(name), "topic": topic})
 	}
@@ -263,7 +280,7 @@ func run() (err error) {
 	fmt.Println("lag 0: hai consumer đã xử lý và commit offset mọi event trên topic.")
 	fmt.Println()
 
-	fmt.Println("== 5. Các event trên topic (key là order id) ==")
+	fmt.Println("== 6. Các event trên topic (key là order id) ==")
 	_ = stop()
 	if _, err := svc.RunRelay(ctx); err != nil {
 		return err

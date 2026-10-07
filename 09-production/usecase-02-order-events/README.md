@@ -46,7 +46,7 @@ Mọi event, kể cả event follow-up do consumer sinh ra, đi qua cùng bảng
 | Trường     | Kiểu và luật                                                              |
 | ---------- | ------------------------------------------------------------------------- |
 | `amount`   | Số hữu hạn lớn hơn 0 (bắt buộc)                                           |
-| `sku`      | Chuỗi không rỗng, tối đa 64 ký tự (bắt buộc)                              |
+| `sku`      | Chuỗi không rỗng, tối đa 64 ký tự tính theo code point (bắt buộc)         |
 | `quantity` | Số nguyên từ 1 tới 1000000, mặc định 1                                    |
 | `id`       | Tùy chọn, 1 tới 64 ký tự trong `A-Za-z0-9_-`, thiếu thì sinh `ord-<uuid>` |
 
@@ -130,6 +130,7 @@ stateDiagram-v2
     placed --> payment_failed: amount vượt hạn mức
     payment_failed --> cancelled: kho đã hoàn
     placed --> cancelled: không đủ hàng
+    paid --> cancelled: không đủ hàng sau khi đã thanh toán
     paid --> [*]
     cancelled --> [*]
 ```
@@ -272,7 +273,7 @@ Endpoint `GET /metrics` của mỗi `OrderService` có registry riêng (không d
 - `consumer_events_total{consumer, result}`: số message mỗi consumer đã xử lý, `result` là `applied`, `duplicate`, `ignored` hoặc `poison`.
   Mọi series được khởi tạo bằng 0.
 - `consumer_group_lag{group, topic}`: lag của từng group, đo MỖI LẦN scrape bằng `consumerLag` (không cache).
-  Nếu Kafka không trả lời thì scrape trả 500, nên Prometheus thấy `up = 0` thay vì một giá trị lag cũ.
+  Nếu Kafka không trả lời thì scrape trả 500 sau tối đa 10 giây (test `metrics_endpoint_returns_500_when_kafka_is_unreachable`), nên Prometheus thấy `up = 0` thay vì một giá trị lag cũ hay một body rỗng.
 
 Cảnh báo nên dựa vào gì (research, nguồn thứ cấp, chưa xác minh với tài liệu chính thức): báo động khi lag tăng liên tục lâu hơn thời gian rebalance hoặc batch bình thường, hoặc khi committed offset đứng yên trong khi lag lớn hơn 0.
 Một ngưỡng cố định ("lag lớn hơn 1000") dễ báo sai khi traffic có đỉnh: Burrow của LinkedIn đánh giá lag theo cửa sổ trượt thay vì ngưỡng cố định.
@@ -303,7 +304,7 @@ Tên giống nhau ở hai ngôn ngữ (Go viết hoa chữ đầu).
 Khác biệt cố ý giữa hai bên:
 
 - TypeScript đọc topic trong `readTopic` bằng một group tạm (rồi xóa), Go đọc từng partition trực tiếp bằng `Reader` không có `GroupID` nên không để lại group nào.
-- Hook mô phỏng lỗi (`afterDedupInsert`, `crashBeforeCommit`) chỉ phục vụ test và demo, không dùng trong luồng thật.
+- Hook mô phỏng lỗi (`afterDedupInsert`, `crashBeforeCommit`) chỉ phục vụ test, demo không dùng chúng, và luồng thật cũng không dùng.
 - Go trả `*InvalidOrderError` và `ErrDuplicateOrder`, TypeScript ném `InvalidOrderError` và `DuplicateOrderError`.
 
 ## Chạy
@@ -317,7 +318,7 @@ make lab-ts LAB=09-production/usecase-02-order-events
 make lab-go LAB=09-production/usecase-02-order-events
 ```
 
-Demo in năm kịch bản: order hợp lệ (reserve, charge, `paid`), thanh toán lỗi và saga hoàn kho, event bị giao trùng, lag trên `/metrics`, và danh sách event trên topic.
+Demo in sáu kịch bản: order hợp lệ (reserve, charge, `paid`), thanh toán lỗi và saga hoàn kho, hết hàng, event bị giao trùng, lag trên `/metrics`, và danh sách event trên topic.
 Cả hai demo chạy relay trong một vòng lặp nền và dọn schema, topic và group của chúng ở cuối.
 Nếu Postgres của bạn không ở cổng 5432 (ví dụ `POSTGRES_PORT=5439 make up`), đặt `DATABASE_URL` tương ứng trước khi chạy.
 
@@ -326,17 +327,22 @@ Nếu Postgres của bạn không ở cổng 5432 (ví dụ `POSTGRES_PORT=5439 
 Test (cùng ý nghĩa ở TS và Go, Go dùng CamelCase).
 Năm test đầu là năm test của đề bài.
 
-| Test                                                                                | Chứng minh                                                                                                                                                          |
-| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `post_orders_emits_exactly_one_order_placed_event`                                  | POST thật trả 201, relay publish đúng một `OrderPlaced` (key là order id, payload và `eventId` đúng), lần relay thứ hai publish 0                                   |
-| `chaos_relay_killed_between_publish_and_mark_still_yields_single_effect_downstream` | Relay là process con bị SIGKILL sau publish, relay mới publish lại, event nằm trên topic ít nhất hai lần nhưng effect, event follow-up và order chỉ một lần         |
-| `duplicate_event_does_not_double_charge`                                            | Cùng `eventId` tới ba lần (hai lần cùng partition, một lần key khác): một payment, một reservation, kho trừ một lần. Lỗi giữa dedup và effect rollback cả hai       |
-| `payment_failure_triggers_inventory_release_via_saga`                               | Thanh toán lỗi: reservation `released`, order `cancelled`, kho về ban đầu, dấu vết `placed, payment_failed, cancelled`, giao lại `PaymentFailed` không hoàn hai lần |
-| `consumer_lag_reaches_zero_after_catching_up`                                       | Lag đúng bằng N khi group chưa commit gì, về 0 sau khi consumer chạy, gauge `/metrics` khớp                                                                         |
-| `invalid_post_body_returns_400_and_inserts_nothing`                                 | Body sai trả 400 và không ghi gì, id trùng trả 409, đường dẫn và method lạ trả 404 và 405                                                                           |
-| `relay_with_an_empty_outbox_returns_zero_without_publishing`                        | Outbox rỗng: relay trả 0, không gọi publish, topic rỗng                                                                                                             |
-| `consumer_crash_after_effect_before_offset_commit_redelivers_and_is_deduped`        | Crash sau effect, trước commit offset: lag còn 1, consumer thay thế nhận lại, dedup bỏ qua, effect một lần                                                          |
-| `poison_event_is_skipped_counted_and_does_not_block_the_partition`                  | Hai event hỏng đứng trước event hợp lệ trong cùng partition: được đếm là `poison`, bị bỏ qua và event hợp lệ vẫn được xử lý                                         |
+| Test                                                                                | Chứng minh                                                                                                                                                                                                           |
+| ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `post_orders_emits_exactly_one_order_placed_event`                                  | POST thật trả 201, relay publish đúng một `OrderPlaced` (key là order id, payload và `eventId` đúng), lần relay thứ hai publish 0                                                                                    |
+| `chaos_relay_killed_between_publish_and_mark_still_yields_single_effect_downstream` | Relay là process con bị SIGKILL sau publish, relay mới publish lại, event nằm trên topic ít nhất hai lần nhưng effect, event follow-up và order chỉ một lần                                                          |
+| `duplicate_event_does_not_double_charge`                                            | Cùng `eventId` tới ba lần (hai lần cùng partition, một lần key khác): một payment, một reservation, kho trừ một lần. Lỗi giữa dedup và effect rollback cả hai                                                        |
+| `payment_failure_triggers_inventory_release_via_saga`                               | Thanh toán lỗi: reservation `released`, order `cancelled`, kho về ban đầu, dấu vết `placed, payment_failed, cancelled`, giao lại `PaymentFailed` không hoàn hai lần                                                  |
+| `consumer_lag_reaches_zero_after_catching_up`                                       | Lag đúng bằng N khi group chưa commit gì, về 0 sau khi consumer chạy, gauge `/metrics` khớp                                                                                                                          |
+| `invalid_post_body_returns_400_and_inserts_nothing`                                 | Body sai trả 400 và không ghi gì, id trùng trả 409, đường dẫn và method lạ trả 404 và 405                                                                                                                            |
+| `relay_with_an_empty_outbox_returns_zero_without_publishing`                        | Outbox rỗng: relay trả 0, không gọi publish, topic rỗng                                                                                                                                                              |
+| `consumer_crash_after_effect_before_offset_commit_redelivers_and_is_deduped`        | Crash sau effect, trước commit offset: lag còn 1, consumer thay thế nhận lại, dedup bỏ qua, effect một lần                                                                                                           |
+| `poison_event_is_skipped_counted_and_does_not_block_the_partition`                  | Hai event hỏng đứng trước event hợp lệ trong cùng partition: được đếm là `poison`, bị bỏ qua và event hợp lệ vẫn được xử lý                                                                                          |
+| `out_of_stock_order_is_rejected_and_cancelled_when_payment_ran_first`               | Kho 1, order cần 3, `payment` xử lý trước: reservation `rejected`, kho không đổi, `InventoryRejected` một lần, order `placed, paid, cancelled`, payment vẫn `charged` (giới hạn đã biết), giao lại không hủy hai lần |
+| `out_of_stock_order_is_rejected_and_cancelled_when_inventory_ran_first`             | Như trên với `inventory` xử lý trước: order `placed, cancelled`                                                                                                                                                      |
+| `metrics_endpoint_returns_500_when_kafka_is_unreachable`                            | Broker không với tới: `/metrics` trả 500 kèm thông báo lỗi trong thời gian có hạn, không phải 200 với body rỗng                                                                                                      |
+| `sku_length_counts_code_points_not_utf16_units`                                     | 64 ký tự ngoài BMP được nhận, 65 bị từ chối, giống nhau ở hai ngôn ngữ                                                                                                                                               |
+| `parse_event_treats_order_placed_without_valid_amount_as_poison`                    | `OrderPlaced` thiếu, null hoặc sai kiểu `amount` là poison (Go: `TestParseEventTreatsOrderPlacedWithoutValidAmountAsPoison`)                                                                                         |
 
 Chaos test (kèm các bước bảo vệ như chương 08, ruling R19): relay chạy trong một process con thật (TypeScript: `node --import tsx ts/chaos-worker.ts`, Go: chạy lại chính test binary ở chế độ helper process), publish lên Kafka với acks=all, ghi marker vào một bảng của chính schema (không dùng Redis) rồi treo trước khi đánh dấu.
 Process cha chờ marker bằng `eventually`, kiểm tra child thoát sớm để báo lỗi ngay kèm stderr của child, gửi SIGKILL, reap child và có thời hạn tự thoát 60 giây để không bao giờ thành process mồ côi.
@@ -380,7 +386,9 @@ Các con số dưới đây do test, demo và các lần thử khi viết use ca
   Đó chính là tín hiệu lag dùng để cảnh báo, nhưng use case không có ngưỡng thử lại tối đa hay đường escalate cho người vận hành.
   Chương 08, lab 06 mô tả cách báo compensation lỗi và vì sao compensation phải idempotent.
 - Hết hàng chưa được xử lý trọn vẹn.
-  `inventory` ghi `rejected`, hủy order và phát `InventoryRejected`, nhưng `payment` chạy song song nên có thể đã charge (hoặc charge sau đó) cho order bị hủy, và use case không có bước hoàn tiền.
+  `inventory` ghi `rejected`, hủy order và phát `InventoryRejected`, nhưng `payment` chạy song song nên vẫn charge cho order bị hủy, và use case không có bước hoàn tiền.
+  Có hai thứ tự xen kẽ và cả hai đều kết thúc ở `cancelled`: nếu `inventory` chạy trước thì order đi `placed, cancelled` rồi `payment` vẫn ghi payment `charged` (guard trạng thái không đổi được order đã hủy), còn nếu `payment` chạy trước thì order đi `placed, paid, cancelled` vì `inventory` hủy được từ cả `placed` lẫn `paid`.
+  Hậu quả giống nhau: một payment `charged` và một `PaymentCompleted` cho order đã hủy, không ai hoàn tiền.
   Muốn đóng chỗ này thì `payment` phải chờ `InventoryReserved` (chuỗi tuần tự) hoặc có compensation hoàn tiền (bài tập 3).
 - Số lượng tồn kho là một bộ đếm theo `sku`, không có đặt chỗ hết hạn: reservation `reserved` không bao giờ tự hết hạn.
 - `POST /orders` không có idempotency key: client gửi lại cùng một order không có `id` sẽ tạo order thứ hai.

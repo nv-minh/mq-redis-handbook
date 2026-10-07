@@ -127,7 +127,29 @@ try {
   console.log(`kho còn ${await stock()}: 3 sản phẩm đã được giữ rồi trả lại (compensation)\n`);
 
   console.log(
-    "== 3. Event bị giao trùng: consumer dedupe theo eventId trong cùng transaction với effect ==",
+    "== 3. Hết hàng (order cần 20, kho chỉ còn vài sản phẩm): inventory từ chối và hủy order ==",
+  );
+  const big = await post({ amount: 100, sku: SKU, quantity: 20 });
+  const bigId = big.json.id as string;
+  console.log(`POST /orders -> ${big.status}, id ${bigId}`);
+  await eventually(async () => ((await status(bigId)) === "cancelled" ? true : undefined), {
+    timeoutMs: 30_000,
+  });
+  const reservation = await scalar<string>(
+    "select status as value from reservations where order_id = $1",
+    [bigId],
+  );
+  const payment = await scalar<string>("select status as value from payments where order_id = $1", [
+    bigId,
+  ]);
+  console.log(`trạng thái: ${await trail(bigId)}`);
+  console.log(`kho vẫn còn ${await stock()}, reservation: ${reservation}`);
+  console.log(
+    `payment của order bị hủy: ${payment} (giới hạn đã biết: payment chạy song song và use case không có bước hoàn tiền)\n`,
+  );
+
+  console.log(
+    "== 4. Event bị giao trùng: consumer dedupe theo eventId trong cùng transaction với effect ==",
   );
   const { rows } = await pool.query<{ event_id: string; payload: Record<string, unknown> }>(
     "select event_id, payload from outbox where aggregate_id = $1 and type = 'OrderPlaced'",
@@ -160,7 +182,7 @@ try {
   );
   console.log("effect vẫn chỉ áp dụng một lần.\n");
 
-  console.log("== 4. Lag của consumer group trên /metrics ==");
+  console.log("== 5. Lag của consumer group trên /metrics ==");
   await eventually(
     async () => {
       const lag = await metric("consumer_group_lag", {
@@ -177,7 +199,7 @@ try {
   }
   console.log("lag 0: hai consumer đã xử lý và commit offset mọi event trên topic.\n");
 
-  console.log("== 5. Các event trên topic (key là order id) ==");
+  console.log("== 6. Các event trên topic (key là order id) ==");
   relayRunning = false;
   await relayLoop;
   await service.runRelay();

@@ -231,7 +231,7 @@ func lockDemo(ctx context.Context, rdb *redis.Client, prefix string) error {
 	fenceKey := prefix + ":lock:fence"
 	a, err := fencedAcquire(ctx, rdb, lockKey, fenceKey, 300*time.Millisecond)
 	if err != nil || a == nil {
-		return fmt.Errorf("A không lấy được lock: %v", err)
+		return fmt.Errorf("holder A không lấy được lock (lỗi: %v)", err)
 	}
 	fmt.Printf("A lấy lock (TTL 300 ms), fencing token %d. Rồi A bị pause quá TTL...\n", a.fence)
 	var b *holder

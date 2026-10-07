@@ -52,11 +52,17 @@ func newEnv(t *testing.T) *env {
 	return e
 }
 
+// scan liệt kê key khớp pattern bằng SCAN (không dùng KEYS vì KEYS chặn Redis dùng chung).
 func (e *env) scan(pattern string) []string {
 	e.t.Helper()
-	keys, err := e.redis.Keys(context.Background(), pattern).Result()
-	if err != nil {
-		e.t.Fatalf("KEYS %s lỗi: %v", pattern, err)
+	ctx := context.Background()
+	var keys []string
+	iter := e.redis.Scan(ctx, 0, pattern, 200).Iterator()
+	for iter.Next(ctx) {
+		keys = append(keys, iter.Val())
+	}
+	if err := iter.Err(); err != nil {
+		e.t.Fatalf("SCAN %s lỗi: %v", pattern, err)
 	}
 	return keys
 }
@@ -70,7 +76,7 @@ func (e *env) queueName() string {
 		if err := DestroyQueue(redisURL(), name); err != nil {
 			e.t.Errorf("DestroyQueue lỗi: %v", err)
 		}
-		if left := e.scan("asynq:{" + name + "}*"); len(left) > 0 {
+		if left := e.scan(keyPattern(name)); len(left) > 0 {
 			e.t.Errorf("còn key của queue %s sau khi dọn: %v", name, left)
 		}
 	})
@@ -599,4 +605,35 @@ func TestShutdownWithNoJobInFlightResolvesImmediatelyAndClosesMetricsEndpoint(t 
 	testkit.Eventually(t, 5*time.Second, func() (struct{}, bool) {
 		return struct{}{}, runtime.NumGoroutine() <= goroutinesBefore
 	})
+}
+
+// Tên queue có ký tự glob (`*`) không được làm DestroyQueue xóa key của queue khác.
+// Test chỉ đụng key mang tiền tố duy nhất của chính nó, nên an toàn trên Redis dùng chung.
+func TestDestroyQueueWithGlobCharactersInNameDoesNotTouchOtherQueues(t *testing.T) {
+	e := newEnv(t)
+	prefix := testkit.UniqueName("glob-victim")
+	victim := "asynq:{" + prefix + "-other}:marker"
+	ctx := context.Background()
+	if err := e.redis.Set(ctx, victim, "còn", 0).Err(); err != nil {
+		t.Fatalf("SET lỗi: %v", err)
+	}
+	t.Cleanup(func() { e.redis.Del(ctx, victim) })
+
+	if err := DestroyQueue(redisURL(), prefix+"*"); err != nil {
+		t.Fatalf("DestroyQueue lỗi: %v", err)
+	}
+	if n, err := e.redis.Exists(ctx, victim).Result(); err != nil || n != 1 {
+		t.Errorf("key của queue khác đã bị xóa (exists = %d, err = %v)", n, err)
+	}
+}
+
+func TestKeyPatternEscapesGlobMetacharacters(t *testing.T) {
+	got := keyPattern(`a*b?[c]\d`)
+	want := `asynq:{a\*b\?\[c\]\\d}*`
+	if got != want {
+		t.Errorf("keyPattern = %q, muốn %q", got, want)
+	}
+	if got := keyPattern("plain-name"); got != "asynq:{plain-name}*" {
+		t.Errorf("keyPattern = %q với tên thường", got)
+	}
 }

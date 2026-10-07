@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -248,8 +249,12 @@ func (s *JobSystem) Shutdown() error {
 
 // DestroyQueue xóa mọi key của một queue (Inspector.DeleteQueue với force), dùng khi dọn test và demo.
 // Gọi sau khi mọi server của queue đã đóng (asynq từ chối xóa queue còn task active).
-// Các key còn sót dưới asynq:{<queue>} (ví dụ bộ đếm thống kê theo ngày) cũng bị xóa.
+// Các key còn sót dưới asynq:{<queue>} (ví dụ bộ đếm thống kê theo ngày) cũng bị xóa, theo pattern đã escape
+// ký tự glob nên tên queue không thể làm hàm này đụng tới key của queue khác.
 func DestroyQueue(redisURL, queue string) error {
+	if queue == "" {
+		return errors.New("tên queue không được để trống")
+	}
 	redisOpt, err := asynq.ParseRedisURI(redisURL)
 	if err != nil {
 		return err
@@ -267,9 +272,16 @@ func DestroyQueue(redisURL, queue string) error {
 	}
 	client := redis.NewClient(opts)
 	ctx := context.Background()
-	iter := client.Scan(ctx, 0, "asynq:{"+queue+"}*", 200).Iterator()
+	iter := client.Scan(ctx, 0, keyPattern(queue), 200).Iterator()
 	for iter.Next(ctx) {
 		err = errors.Join(err, client.Del(ctx, iter.Val()).Err())
 	}
 	return errors.Join(err, iter.Err(), client.Close())
 }
+
+// globEscaper thêm dấu `\` trước các ký tự đặc biệt của pattern MATCH (`\ * ? [ ]`).
+var globEscaper = strings.NewReplacer(`\`, `\\`, `*`, `\*`, `?`, `\?`, `[`, `\[`, `]`, `\]`)
+
+// keyPattern trả về pattern SCAN MATCH cho mọi key của một queue. Tên queue được escape để một tên
+// như `*` chỉ khớp đúng chính nó chứ không khớp key của queue khác.
+func keyPattern(queue string) string { return "asynq:{" + globEscaper.Replace(queue) + "}*" }

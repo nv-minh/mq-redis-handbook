@@ -59,8 +59,8 @@ async function scanKeys(pattern: string): Promise<string[]> {
   return found;
 }
 
-/** Chạy mọi bước dọn dẹp dù một bước ném lỗi, rồi ném lỗi đầu tiên. */
-async function runAll(steps: (() => Promise<unknown>)[]): Promise<void> {
+/** Chạy các bước SONG SONG (trong cùng một pha), chờ hết cả khi có bước lỗi, rồi ném lỗi đầu tiên. */
+async function settleAll(steps: (() => Promise<unknown>)[]): Promise<void> {
   const results = await Promise.allSettled(
     steps.map(async (step) => {
       await step();
@@ -70,17 +70,35 @@ async function runAll(steps: (() => Promise<unknown>)[]): Promise<void> {
   if (failed) throw (failed as PromiseRejectedResult).reason;
 }
 
+/**
+ * Chạy các pha TUẦN TỰ: pha sau chỉ bắt đầu khi pha trước đã xong hẳn. Một pha lỗi không làm bỏ qua
+ * các pha sau (việc dọn vẫn phải chạy tiếp), và lỗi đầu tiên được ném lại ở cuối.
+ */
+async function runPhases(phases: (() => Promise<unknown>)[]): Promise<void> {
+  const errors: unknown[] = [];
+  for (const phase of phases) {
+    try {
+      await phase();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (errors.length > 0) throw errors[0];
+}
+
 afterEach(async () => {
   // Mở mọi gate để shutdown không bị treo bởi một sender còn bị giữ.
   for (const gate of gates.splice(0)) gate.release();
   const toClose = systems.splice(0);
   const names = [...queueNames];
   queueNames.clear();
-  await runAll([
-    () => Promise.all(toClose.map((system) => system.shutdown(2000))),
-    // Sau khi worker đã đóng: obliterate rồi kiểm tra không còn key nào của queue.
+  await runPhases([
+    // Pha 1: đóng mọi hệ thống (worker, metrics endpoint, connection).
+    () => settleAll(toClose.map((system) => () => system.shutdown(2000))),
+    // Pha 2: chỉ khi mọi worker đã đóng xong mới obliterate queue.
+    () => settleAll(names.map((name) => () => destroyQueue(redisUrl, name))),
+    // Pha 3: kiểm tra không còn key nào của queue.
     async () => {
-      await runAll(names.map((name) => () => destroyQueue(redisUrl, name)));
       for (const name of names) {
         expect(await scanKeys(`bull:${name}:*`), `key còn sót của queue ${name}`).toEqual([]);
       }
@@ -374,5 +392,41 @@ describe("usecase-01 job queue (BullMQ): retry, failed set, delay, graceful shut
     await expect(fetch(system.metricsUrl)).rejects.toThrow();
     // Gọi lần hai vẫn an toàn.
     await system.shutdown(30_000);
+  });
+});
+
+describe("usecase-01 job queue (BullMQ): teardown helper", () => {
+  it("teardown_phases_run_one_after_another_and_a_failing_phase_does_not_skip_the_next", async () => {
+    const order: string[] = [];
+    const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+    await expect(
+      runPhases([
+        async () => {
+          order.push("shutdown-start");
+          await tick();
+          await tick();
+          order.push("shutdown-end");
+        },
+        async () => {
+          order.push("destroy-start");
+          await tick();
+          order.push("destroy-end");
+          throw new Error("destroy lỗi");
+        },
+        async () => {
+          order.push("scan");
+        },
+      ]),
+    ).rejects.toThrow("destroy lỗi");
+
+    // Pha sau không bắt đầu trước khi pha trước kết thúc, và pha lỗi không chặn pha tiếp theo.
+    expect(order).toEqual([
+      "shutdown-start",
+      "shutdown-end",
+      "destroy-start",
+      "destroy-end",
+      "scan",
+    ]);
   });
 });

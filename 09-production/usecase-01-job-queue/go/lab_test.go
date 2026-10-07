@@ -437,9 +437,16 @@ func TestInFlightJobOutlastingShutdownTimeoutIsRequeued(t *testing.T) {
 		t.Errorf("Retried = %d, muốn 0: requeue không phải một lần fail", info.Retried)
 	}
 	mu.Lock()
-	defer mu.Unlock()
 	if len(recovered.snapshot()) != 1 || !slices.Equal(attempts, []int{1}) {
 		t.Errorf("worker thứ hai chạy %d lần với attempts %v, muốn đúng một lần ở lần chạy 1", len(recovered.snapshot()), attempts)
+	}
+	mu.Unlock()
+
+	// Sender cũ cuối cùng cũng xong: kết quả của nó không làm đổi trạng thái task.
+	g.release()
+	running.Wait()
+	if after := e.info(second, id); after.State != asynq.TaskStateCompleted || after.Retried != 0 {
+		t.Errorf("sau khi sender cũ xong: State = %v, Retried = %d, muốn completed và 0", after.State, after.Retried)
 	}
 }
 

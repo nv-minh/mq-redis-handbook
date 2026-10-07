@@ -174,10 +174,12 @@ export async function readTopic(topic: string): Promise<TopicRecord[]> {
     kafkaJS: { groupId, fromBeginning: true, autoCommit: false, allowAutoTopicCreation: false },
   });
   const records: TopicRecord[] = [];
+  // Cờ này tắt trước khi disconnect: lỗi do chính việc ngắt consumer gây ra không được log như lỗi thật.
+  let reading = true;
   await consumer.connect();
   try {
     await consumer.subscribe({ topics: [topic] });
-    // run() trả về ngay, việc đọc chạy nền. Bắt lỗi để không thành unhandled rejection khi disconnect.
+    // run() trả về ngay, việc đọc chạy nền. Bắt lỗi để không thành unhandled rejection, và log lỗi thật (lỗi do disconnect có chủ đích thì bỏ qua).
     void consumer
       .run({
         eachMessage: async ({ partition, message }) => {
@@ -191,11 +193,15 @@ export async function readTopic(topic: string): Promise<TopicRecord[]> {
           });
         },
       })
-      .catch(() => undefined);
+      .catch((error: unknown) => {
+        if (!reading) return;
+        console.error("[order-events] readTopic: consumer.run() lỗi:", error);
+      });
     await eventually(async () => (records.length >= expected ? true : undefined), {
       timeoutMs: 30_000,
     });
   } finally {
+    reading = false;
     await consumer.disconnect().catch(() => undefined);
     await deleteGroup(groupId);
   }
@@ -268,7 +274,7 @@ export async function startConsumer(spec: ConsumerSpec): Promise<RunningConsumer
   await consumer.connect();
   try {
     await consumer.subscribe({ topics: [spec.topic] });
-    // run() trả về ngay, việc đọc chạy nền. Bắt lỗi để không thành unhandled rejection khi teardown đã ngắt consumer.
+    // run() trả về ngay, việc đọc chạy nền. Bắt lỗi để không thành unhandled rejection, và log lỗi thật (lỗi do stop() có chủ đích thì bỏ qua).
     void consumer
       .run({
         eachMessage: async ({ partition, message }) => {
@@ -302,7 +308,9 @@ export async function startConsumer(spec: ConsumerSpec): Promise<RunningConsumer
           await commit(partition, message.offset);
         },
       })
-      .catch(() => undefined);
+      .catch((error: unknown) => {
+        if (!stopping) console.error(`[order-events] consumer ${spec.groupId}: run() lỗi:`, error);
+      });
   } catch (error) {
     await running.stop();
     throw error;

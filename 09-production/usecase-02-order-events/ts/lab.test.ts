@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Pool } from "pg";
 import { eventually, uniqueName } from "@handbook/testkit";
+import { parseEvent } from "./events.js";
 import {
   createSchema,
   createTables,
@@ -513,6 +514,141 @@ describe("usecase-02 order events: outbox, Kafka, idempotent consumers, saga", (
     expect(await statusOf(env.pool, id)).toBe("paid");
     expect(await stockOf(env.pool)).toBe(9);
   }, 90_000);
+
+  /**
+   * Order hết hàng: kho chỉ có 1 mà order cần 3. Hai consumer chạy độc lập nên có hai thứ tự xen kẽ, và test chạy cả hai
+   * bằng cách chỉ khởi động MỘT consumer trước (cổng): `first` chạy trước, consumer còn lại chạy sau.
+   * Kết quả phải giống nhau: reservation `rejected`, kho không đổi, `InventoryRejected` trên topic, order `cancelled`.
+   */
+  async function outOfStockScenario(first: "inventory" | "payment"): Promise<void> {
+    const env = await newEnv();
+    await seedStock(env.pool, SKU, 1);
+    const { json } = await post(env, { amount: 10, sku: SKU, quantity: 3 });
+    const { id } = json as { id: string };
+    expect(await env.service.runRelay()).toBe(1);
+
+    await startConsumer(env, first);
+    await eventually(
+      async () =>
+        (await metric(env.service, "consumer_events_total", {
+          consumer: first,
+          result: "applied",
+        })) === 1 || undefined,
+      { timeoutMs: 40_000 },
+    );
+    const second = first === "inventory" ? "payment" : "inventory";
+    await startConsumer(env, second);
+    await eventually(async () => (await statusOf(env.pool, id)) === "cancelled" || undefined, {
+      timeoutMs: 40_000,
+    });
+    await eventually(
+      async () =>
+        (await metric(env.service, "consumer_events_total", {
+          consumer: second,
+          result: "applied",
+        })) === 1 || undefined,
+      { timeoutMs: 40_000 },
+    );
+    await eventually(async () => (await env.service.runRelay()) === 0 || undefined, {
+      timeoutMs: 20_000,
+    });
+
+    expect(
+      await scalar<string>(
+        env.pool,
+        "select status as value from reservations where order_id = $1",
+        [id],
+      ),
+    ).toBe("rejected");
+    expect(await stockOf(env.pool)).toBe(1);
+    expect(events(await readTopic(env.topic), "InventoryRejected")).toHaveLength(1);
+    expect(await statusOf(env.pool, id)).toBe("cancelled");
+    // Giới hạn đã biết, README ghi rõ: payment chạy song song nên vẫn charge order bị hủy và không có bước hoàn tiền.
+    expect(
+      await scalar<string>(env.pool, "select status as value from payments where order_id = $1", [
+        id,
+      ]),
+    ).toBe("charged");
+    expect(await trailOf(env.pool, id)).toEqual(
+      first === "payment" ? ["placed", "paid", "cancelled"] : ["placed", "cancelled"],
+    );
+
+    // Giao lại OrderPlaced (cùng eventId rồi eventId khác): không hủy lần hai, không event follow-up mới.
+    const placed = await placedEnvelope(env.pool, id);
+    const producer = await createProducer();
+    producers.push(producer);
+    await sendRaw(producer, env.topic, id, wire(placed));
+    await sendRaw(producer, env.topic, id, wire({ ...placed, eventId: "op-lan-hai" }));
+    await eventually(
+      async () =>
+        ((await metric(env.service, "consumer_events_total", {
+          consumer: "inventory",
+          result: "duplicate",
+        })) === 1 &&
+          (await metric(env.service, "consumer_events_total", {
+            consumer: "inventory",
+            result: "applied",
+          })) === 2) ||
+        undefined,
+      { timeoutMs: 40_000 },
+    );
+    await env.service.runRelay();
+    expect(events(await readTopic(env.topic), "InventoryRejected")).toHaveLength(1);
+    expect(
+      await count(
+        env.pool,
+        "select count(*) as value from outbox where type = 'InventoryRejected'",
+      ),
+    ).toBe(1);
+    expect(await stockOf(env.pool)).toBe(1);
+    expect(await statusOf(env.pool, id)).toBe("cancelled");
+  }
+
+  it("out_of_stock_order_is_rejected_and_cancelled_when_payment_ran_first", async () => {
+    await outOfStockScenario("payment");
+  }, 120_000);
+
+  it("out_of_stock_order_is_rejected_and_cancelled_when_inventory_ran_first", async () => {
+    await outOfStockScenario("inventory");
+  }, 120_000);
+
+  it("metrics_endpoint_returns_500_when_kafka_is_unreachable", async () => {
+    const env = await newEnv();
+    // Cổng 1 không có ai nghe: admin client của bộ thu lag bị từ chối kết nối. Producer của service đã kết nối từ trước.
+    const previous = process.env.KAFKA_BROKERS;
+    process.env.KAFKA_BROKERS = "127.0.0.1:1";
+    const started = Date.now();
+    try {
+      const response = await fetch(env.service.metricsUrl, { signal: AbortSignal.timeout(40_000) });
+      expect(response.status).toBe(500);
+      expect((await response.text()).length).toBeGreaterThan(0);
+    } finally {
+      if (previous === undefined) delete process.env.KAFKA_BROKERS;
+      else process.env.KAFKA_BROKERS = previous;
+    }
+    // Lỗi phải có hạn: scrape không được treo hàng phút khi broker không với tới.
+    expect(Date.now() - started).toBeLessThan(30_000);
+  }, 60_000);
+
+  it("sku_length_counts_code_points_not_utf16_units", async () => {
+    const env = await newEnv();
+    // Ký tự ngoài BMP chiếm 2 đơn vị UTF-16 nhưng là 1 code point: 64 ký tự được nhận, 65 ký tự bị từ chối.
+    expect((await post(env, { amount: 10, sku: "😀".repeat(64) })).status).toBe(201);
+    expect((await post(env, { amount: 10, sku: "😀".repeat(65) })).status).toBe(400);
+    expect(await count(env.pool, "select count(*) as value from orders")).toBe(1);
+  }, 60_000);
+
+  it("parse_event_treats_order_placed_without_valid_amount_as_poison", () => {
+    const base = { eventId: "e1", type: "OrderPlaced", orderId: "o1" };
+    const data = { sku: SKU, quantity: 1 };
+    expect(parseEvent(JSON.stringify({ ...base, data: { ...data, amount: 5 } }))).toBeDefined();
+    for (const bad of [data, { ...data, amount: null }, { ...data, amount: "5" }]) {
+      expect(
+        parseEvent(JSON.stringify({ ...base, data: bad })),
+        JSON.stringify(bad),
+      ).toBeUndefined();
+    }
+  });
 });
 
 describe("chaos", () => {

@@ -227,7 +227,7 @@ export function parseOrderRequest(body: unknown): NewOrder {
   if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
     throw new InvalidOrderError("amount phải là số lớn hơn 0");
   }
-  if (typeof sku !== "string" || sku === "" || sku.length > 64) {
+  if (typeof sku !== "string" || sku === "" || [...sku].length > 64) {
     throw new InvalidOrderError("sku phải là chuỗi không rỗng, tối đa 64 ký tự");
   }
   const qty = quantity === undefined ? 1 : quantity;
@@ -424,7 +424,8 @@ export function inventoryHandler(pool: pg.Pool, options: HandlerOptions = {}): H
           await client.query("update reservations set status = 'rejected' where order_id = $1", [
             event.orderId,
           ]);
-          await setStatus(client, event.orderId, "cancelled", ["placed"]);
+          // Từ `placed` hoặc `paid`: payment chạy song song nên order có thể đã `paid` khi kho báo hết hàng.
+          await setStatus(client, event.orderId, "cancelled", ["placed", "paid"]);
           await emit(client, "InventoryRejected", event.orderId, {
             sku,
             quantity,
@@ -529,6 +530,9 @@ export interface OrderService {
 
 const MAX_BODY_BYTES = 64 * 1024;
 
+/** Hạn cho một lần đo lag khi scrape `/metrics`. */
+const LAG_TIMEOUT_MS = 10_000;
+
 /** Lỗi khi body vượt giới hạn (HTTP 413). */
 class BodyTooLargeError extends Error {}
 
@@ -581,14 +585,25 @@ export async function createOrderService(options: OrderServiceOptions): Promise<
     labelNames: ["group", "topic"],
     registers: [registry],
     async collect() {
-      // Một admin client cho cả hai group trong một lần scrape.
-      const lags = await withAdmin(async (admin) =>
+      // Một admin client cho cả hai group trong một lần scrape. Hạn 10 giây (như bản Go): broker không với tới thì
+      // scrape lỗi trong thời gian có hạn thay vì treo.
+      let timer: NodeJS.Timeout | undefined;
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`đo lag quá ${LAG_TIMEOUT_MS} ms, Kafka không trả lời`)),
+          LAG_TIMEOUT_MS,
+        );
+      });
+      const measure = withAdmin(async (admin) =>
         Promise.all(
           CONSUMER_NAMES.map(
             async (name) => [groupId(name), await lagWith(admin, groupId(name), topic)] as const,
           ),
         ),
       );
+      // Nếu hết hạn trước, kết quả muộn của measure bị bỏ: gắn catch để nó không thành unhandled rejection.
+      measure.catch(() => undefined);
+      const lags = await Promise.race([measure, timeout]).finally(() => clearTimeout(timer));
       lagGauge.reset();
       for (const [group, lag] of lags) lagGauge.set({ group, topic }, lag);
     },
@@ -617,8 +632,10 @@ export async function createOrderService(options: OrderServiceOptions): Promise<
   ): Promise<void> {
     const path = new URL(request.url ?? "/", "http://localhost").pathname;
     if (path === "/metrics" && request.method === "GET") {
-      response.writeHead(200, { "Content-Type": registry.contentType });
-      response.end(await registry.metrics());
+      // Tính body TRƯỚC khi gửi header: nếu bộ thu lag lỗi (Kafka không với tới) thì trả 500 (Prometheus thấy up = 0),
+      // không phải 200 với body rỗng.
+      const body = await registry.metrics();
+      response.writeHead(200, { "Content-Type": registry.contentType }).end(body);
       return;
     }
     if (path !== "/orders") {

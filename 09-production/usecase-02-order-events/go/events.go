@@ -67,12 +67,22 @@ func ParseEvent(value []byte) (DomainEvent, bool) {
 	return e, true
 }
 
-// placed đọc data của OrderPlaced. ok=false nếu sku rỗng, quantity không phải số nguyên từ 1 hoặc amount không hữu hạn.
+// placed đọc data của OrderPlaced. ok=false nếu thiếu hoặc null một trong sku, quantity, amount, hoặc sku rỗng,
+// quantity không phải số nguyên từ 1, amount không hữu hạn. Kiểm tra sự có mặt bằng con trỏ: nếu không, amount
+// thiếu sẽ thành 0 và consumer charge 0 (bản TypeScript từ chối vì typeof amount khác number).
 func (e DomainEvent) placed() (OrderPlacedData, bool) {
-	var d OrderPlacedData
-	if err := json.Unmarshal(e.Data, &d); err != nil {
+	var raw struct {
+		Amount   *float64 `json:"amount"`
+		Sku      *string  `json:"sku"`
+		Quantity *int     `json:"quantity"`
+	}
+	if err := json.Unmarshal(e.Data, &raw); err != nil {
 		return OrderPlacedData{}, false
 	}
+	if raw.Amount == nil || raw.Sku == nil || raw.Quantity == nil {
+		return OrderPlacedData{}, false
+	}
+	d := OrderPlacedData{Amount: *raw.Amount, Sku: *raw.Sku, Quantity: *raw.Quantity}
 	if d.Sku == "" || d.Quantity < 1 || math.IsNaN(d.Amount) || math.IsInf(d.Amount, 0) {
 		return OrderPlacedData{}, false
 	}

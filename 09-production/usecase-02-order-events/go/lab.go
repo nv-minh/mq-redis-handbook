@@ -463,7 +463,8 @@ func reserve(ctx context.Context, tx pgx.Tx, event DomainEvent) error {
 	if _, err := tx.Exec(ctx, "update reservations set status = 'rejected' where order_id = $1", event.OrderID); err != nil {
 		return err
 	}
-	if err := setStatus(ctx, tx, event.OrderID, "cancelled", "placed"); err != nil {
+	// Từ placed hoặc paid: payment chạy song song nên order có thể đã paid khi kho báo hết hàng.
+	if err := setStatus(ctx, tx, event.OrderID, "cancelled", "placed", "paid"); err != nil {
 		return err
 	}
 	reservation["reason"] = "insufficient_stock"

@@ -308,8 +308,11 @@ func TestPostOrdersEmitsExactlyOneOrderPlacedEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadTopic lỗi: %v", err)
 	}
-	if len(records) != 1 || records[0].Key != id {
-		t.Fatalf("topic có %d message (key %q), mong đợi đúng 1 với key %q", len(records), records[0].Key, id)
+	if len(records) != 1 {
+		t.Fatalf("topic có %d message, mong đợi đúng 1", len(records))
+	}
+	if records[0].Key != id {
+		t.Fatalf("key của message là %q, mong đợi order id %q", records[0].Key, id)
 	}
 	placed := eventsOf(records, EventOrderPlaced)
 	if len(placed) != 1 || placed[0].EventID != eventID || placed[0].OrderID != id {
@@ -720,6 +723,149 @@ func TestPoisonEventIsSkippedCountedAndDoesNotBlockThePartition(t *testing.T) {
 	}
 	if got := e.stock(t); got != 9 {
 		t.Fatalf("kho còn %d, mong đợi 9", got)
+	}
+}
+
+// outOfStockScenario: kho chỉ có 1 mà order cần 3. Hai consumer chạy độc lập nên có hai thứ tự xen kẽ, và test chạy cả hai
+// bằng cách chỉ khởi động MỘT consumer trước (cổng): first chạy trước, consumer còn lại chạy sau.
+// Kết quả phải giống nhau: reservation rejected, kho không đổi, InventoryRejected trên topic, order cancelled.
+func outOfStockScenario(t *testing.T, first string) {
+	ctx := context.Background()
+	e := newEnv(t)
+	if err := SeedStock(ctx, e.pool, sku, 1); err != nil {
+		t.Fatalf("SeedStock lỗi: %v", err)
+	}
+	status, body := e.post(t, map[string]any{"amount": 10, "sku": sku, "quantity": 3})
+	if status != http.StatusCreated {
+		t.Fatalf("POST /orders trả %d: %v", status, body)
+	}
+	id := body["id"].(string)
+	if got := mustRelay(t, e); got != 1 {
+		t.Fatalf("relay publish %d event, mong đợi 1", got)
+	}
+	applied := func(consumer string) float64 {
+		return e.metric(t, "consumer_events_total", map[string]string{"consumer": consumer, "result": "applied"})
+	}
+
+	e.startConsumer(t, first, ConsumerOptions{})
+	testkit.Eventually(t, 40*time.Second, func() (struct{}, bool) { return struct{}{}, applied(first) == 1 })
+	second := ConsumerInventory
+	if first == ConsumerInventory {
+		second = ConsumerPayment
+	}
+	e.startConsumer(t, second, ConsumerOptions{})
+	testkit.Eventually(t, 40*time.Second, func() (struct{}, bool) {
+		return struct{}{}, e.str(t, "select status from orders where id = $1", id) == "cancelled" && applied(second) == 1
+	})
+	testkit.Eventually(t, 20*time.Second, func() (struct{}, bool) {
+		n, err := e.svc.RunRelay(ctx)
+		return struct{}{}, err == nil && n == 0
+	})
+
+	if got := e.str(t, "select status from reservations where order_id = $1", id); got != "rejected" {
+		t.Fatalf("reservation ở trạng thái %q, mong đợi rejected", got)
+	}
+	if got := e.stock(t); got != 1 {
+		t.Fatalf("kho còn %d, mong đợi không đổi (1)", got)
+	}
+	if n := len(e.events(t, EventInventoryRejected)); n != 1 {
+		t.Fatalf("có %d event InventoryRejected, mong đợi đúng 1", n)
+	}
+	// Giới hạn đã biết, README ghi rõ: payment chạy song song nên vẫn charge order bị hủy và không có bước hoàn tiền.
+	if got := e.str(t, "select status from payments where order_id = $1", id); got != "charged" {
+		t.Fatalf("payment ở trạng thái %q, mong đợi charged (giới hạn đã biết: không hoàn tiền)", got)
+	}
+	want := []string{"placed", "cancelled"}
+	if first == ConsumerPayment {
+		want = []string{"placed", "paid", "cancelled"}
+	}
+	if got := e.trail(t, id); !slices.Equal(got, want) {
+		t.Fatalf("dấu vết trạng thái = %v, mong đợi %v", got, want)
+	}
+
+	// Giao lại OrderPlaced (cùng eventId rồi eventId khác): không hủy lần hai, không event follow-up mới.
+	placed := e.placedEnvelope(t, id)
+	p := newProducer(t)
+	mustSend(t, p, e.topic, id, wire(t, placed))
+	again := placed
+	again.EventID = "op-lan-hai"
+	mustSend(t, p, e.topic, id, wire(t, again))
+	testkit.Eventually(t, 40*time.Second, func() (struct{}, bool) {
+		dup := e.metric(t, "consumer_events_total", map[string]string{"consumer": "inventory", "result": "duplicate"})
+		return struct{}{}, dup == 1 && applied("inventory") == 2
+	})
+	mustRelay(t, e)
+	if n := len(e.events(t, EventInventoryRejected)); n != 1 {
+		t.Fatalf("có %d event InventoryRejected sau redelivery, mong đợi 1", n)
+	}
+	if n := e.count(t, "select count(*) from outbox where type = 'InventoryRejected'"); n != 1 {
+		t.Fatalf("outbox có %d dòng InventoryRejected, mong đợi 1", n)
+	}
+	if got := e.stock(t); got != 1 {
+		t.Fatalf("kho còn %d sau redelivery, mong đợi 1", got)
+	}
+	if got := e.str(t, "select status from orders where id = $1", id); got != "cancelled" {
+		t.Fatalf("order ở trạng thái %q, mong đợi cancelled", got)
+	}
+}
+
+func TestOutOfStockOrderIsRejectedAndCancelledWhenPaymentRanFirst(t *testing.T) {
+	outOfStockScenario(t, ConsumerPayment)
+}
+
+func TestOutOfStockOrderIsRejectedAndCancelledWhenInventoryRanFirst(t *testing.T) {
+	outOfStockScenario(t, ConsumerInventory)
+}
+
+func TestMetricsEndpointReturns500WhenKafkaIsUnreachable(t *testing.T) {
+	e := newEnv(t)
+	// Cổng 1 không có ai nghe: bộ thu lag bị từ chối kết nối. Producer của service đã được tạo từ trước.
+	t.Setenv("KAFKA_BROKERS", "127.0.0.1:1")
+	started := time.Now()
+	resp, err := httpClient.Get(e.svc.MetricsURL())
+	if err != nil {
+		t.Fatalf("GET /metrics lỗi: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError || len(body) == 0 {
+		t.Fatalf("GET /metrics trả %d (%d byte), mong đợi 500 kèm thông báo lỗi", resp.StatusCode, len(body))
+	}
+	// Lỗi phải có hạn: scrape không được treo hàng phút khi broker không với tới.
+	if elapsed := time.Since(started); elapsed > 30*time.Second {
+		t.Fatalf("scrape lỗi sau %s, mong đợi dưới 30 giây", elapsed)
+	}
+}
+
+func TestSkuLengthCountsCodePointsNotUTF16Units(t *testing.T) {
+	e := newEnv(t)
+	// Ký tự ngoài BMP chiếm 2 đơn vị UTF-16 nhưng là 1 code point: 64 ký tự được nhận, 65 ký tự bị từ chối.
+	if status, out := e.post(t, map[string]any{"amount": 10, "sku": strings.Repeat("😀", 64)}); status != http.StatusCreated {
+		t.Fatalf("64 code point trả %d, mong đợi 201: %v", status, out)
+	}
+	if status, _ := e.post(t, map[string]any{"amount": 10, "sku": strings.Repeat("😀", 65)}); status != http.StatusBadRequest {
+		t.Fatalf("65 code point trả %d, mong đợi 400", status)
+	}
+	if n := e.count(t, "select count(*) from orders"); n != 1 {
+		t.Fatalf("orders có %d dòng, mong đợi 1", n)
+	}
+}
+
+func TestParseEventTreatsOrderPlacedWithoutValidAmountAsPoison(t *testing.T) {
+	wrap := func(data string) []byte {
+		return []byte(`{"eventId":"e1","type":"OrderPlaced","orderId":"o1","data":` + data + `}`)
+	}
+	if _, ok := ParseEvent(wrap(`{"sku":"sku-1","quantity":1,"amount":5}`)); !ok {
+		t.Fatal("event hợp lệ bị coi là poison")
+	}
+	for _, bad := range []string{
+		`{"sku":"sku-1","quantity":1}`,
+		`{"sku":"sku-1","quantity":1,"amount":null}`,
+		`{"sku":"sku-1","quantity":1,"amount":"5"}`,
+	} {
+		if _, ok := ParseEvent(wrap(bad)); ok {
+			t.Errorf("data %s đáng lẽ là poison", bad)
+		}
 	}
 }
 

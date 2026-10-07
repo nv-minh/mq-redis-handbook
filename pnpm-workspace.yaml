@@ -3,4 +3,5 @@ packages:
 allowBuilds:
   "@confluentinc/kafka-javascript": true
   esbuild: true
+  msgpackr-extract: false
   puppeteer: true

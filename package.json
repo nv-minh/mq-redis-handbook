@@ -32,7 +32,9 @@
     "@confluentinc/kafka-javascript": "1.10.1",
     "@nats-io/jetstream": "3.4.0",
     "@nats-io/transport-node": "3.4.0",
+    "@prometheus-io/client": "0.16.1",
     "amqplib": "2.2.0",
+    "bullmq": "6.3.11",
     "ioredis": "6.0.0",
     "pg": "8.23.1"
   }

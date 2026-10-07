@@ -3,5 +3,6 @@ packages:
 allowBuilds:
   "@confluentinc/kafka-javascript": true
   esbuild: true
+  # Optional native accelerator of bullmq (msgpackr): its build script is not allowed, pure JS is the fallback.
   msgpackr-extract: false
   puppeteer: true

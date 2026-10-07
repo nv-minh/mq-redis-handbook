@@ -72,7 +72,7 @@ sequenceDiagram
     Note over W: completed +1
 ```
 
-Đường lỗi 2: worker dừng giữa lúc đang gửi (graceful shutdown, shutdown hết hạn, worker chết).
+Đường lỗi 2: worker dừng giữa lúc đang gửi (graceful shutdown và shutdown hết hạn, là hai đường lab có test).
 
 ```mermaid
 sequenceDiagram
@@ -98,6 +98,11 @@ sequenceDiagram
         Note over B: job chạy hai lần, nên sender phải idempotent
     end
 ```
+
+Lab không kill process worker (SIGKILL), nên đường worker chết đột ngột chưa được đo.
+Chưa xác minh bằng lab: theo source asynq v0.26.0, task của worker chết nằm ở `active` tới khi lease (30 giây) hết hạn, rồi recoverer (quét mỗi 1 phút, chỉ lấy task hết lease hơn 30 giây) đưa nó đi retry bằng `RetryDelayFunc` và TÍNH là một lần retry, hoặc vào archive nếu đã hết `MaxRetry`.
+Khác với đường `Shutdown` hết hạn ở trên, đường này làm `Retried` tăng và có thể kết thúc ở archive.
+Với BullMQ, worker chết cũng đi qua stalled checker như trường hợp `close(true)` đã đo, nhưng lab cũng chưa kill process thật.
 
 ## Giao diện
 
@@ -130,7 +135,7 @@ Khác biệt cố ý giữa hai bên:
 - `failed` là số lần sender lỗi (hoặc panic ở Go), kể cả lần lỗi sẽ được retry.
 - Job lỗi hai lần rồi thành công cho `failed = 2` và `completed = 1`.
 
-Đếm ở mức sender chứ không ở mức broker, nên job chạy lại sau khi worker chết hoặc shutdown hết hạn được đếm lại.
+Đếm ở mức sender chứ không ở mức broker, nên job chạy lại sau khi shutdown hết hạn được đếm lại.
 Muốn đếm "job thất bại hẳn" thì chỉ tăng counter ở lần thử cuối (so `attemptsMade` với `attempts`, hoặc `asynq.GetRetryCount` với `GetMaxRetry`).
 Cả hai nhãn được khởi tạo bằng 0, nên endpoint luôn in ra cả `completed` và `failed`.
 
@@ -199,7 +204,7 @@ Sau khi chạy xong cả hai bộ test và cả hai demo, không còn key `bull:
 ## Giới hạn thật của use case
 
 - At-least-once.
-  Worker chết giữa chừng, `Shutdown` hết hạn hoặc lock hết hạn đều làm job chạy lại, nên một email có thể gửi hai lần.
+  `Shutdown` hết hạn hoặc lock hết hạn đều làm job chạy lại, nên một email có thể gửi hai lần.
   Hàm gửi email phải idempotent (chương 08, lab 01 `08-patterns/lab-01-idempotency`: dedup theo key ổn định, ghi marker và effect cùng nhau).
 - Không có outbox.
   `enqueueEmail` ghi thẳng vào Redis, nên nếu giao dịch của app commit rồi crash trước khi enqueue thì email bị mất.
@@ -221,6 +226,10 @@ Sau khi chạy xong cả hai bộ test và cả hai demo, không còn key `bull:
   Với asynq phải đảm bảo chỉ một scheduler chạy cho mỗi lịch.
 
 Lab dùng `@prometheus-io/client` 0.16.1 thay vì `prom-client`: npm đánh dấu `prom-client` là deprecated và trỏ sang gói này, API giống nhau.
+
+`pnpm-workspace.yaml` đặt `msgpackr-extract: false` trong `allowBuilds`.
+`msgpackr-extract` là bộ tăng tốc native tùy chọn mà bullmq kéo theo, và pnpm không được phép chạy build script của nó.
+Các gói prebuilt theo từng nền tảng là optional dependency nên bộ tăng tốc vẫn có thể được nạp ở nơi có sẵn, và JavaScript thuần là phương án dự phòng.
 
 ## Bài tập mở rộng
 

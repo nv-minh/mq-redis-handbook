@@ -616,7 +616,10 @@ describe("usecase-04 realtime: các cạnh của server", () => {
     expect(server.clientCount(room)).toBe(0);
     expect(server.roomCount()).toBe(0);
     expect(server.redisStatus()).toEqual({ command: "end", subscriber: "end" });
-    expect(await numSub(channel)).toBe(0);
+    // Redis dọn subscription của connection đã đóng bất đồng bộ (khi đọc tới EOF), nên dùng waitUntil.
+    await waitUntil("NUMSUB về 0 sau shutdown", async () => {
+      return (await numSub(channel)) === 0 || undefined;
+    });
     // HTTP server đã dừng: không nhận kết nối mới.
     await expect(fetch(`${server.url}/leaderboard/x/top?n=1`)).rejects.toThrow();
     await expect(upgradeStatus(server.wsUrl(room))).rejects.toThrow();

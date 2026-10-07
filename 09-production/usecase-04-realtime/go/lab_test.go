@@ -198,7 +198,23 @@ func newEnv(t *testing.T, label string) *env {
 		if err != nil || len(left) > 0 {
 			t.Errorf("key còn sót của prefix %s: %v (lỗi %v)", e.prefix, left, err)
 		}
-		channels, err := e.rdb.PubSubChannels(cleanupCtx, escapeGlob(e.prefix)+"*").Result()
+		// Redis dọn subscription của một connection đã đóng một cách bất đồng bộ (khi nó đọc tới EOF), nên chờ
+		// có giới hạn thay vì khẳng định ngay.
+		var channels []string
+		ticker := time.NewTicker(10 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			channels, err = e.rdb.PubSubChannels(cleanupCtx, escapeGlob(e.prefix)+"*").Result()
+			if err != nil || len(channels) == 0 {
+				break
+			}
+			select {
+			case <-ticker.C:
+				continue
+			case <-cleanupCtx.Done():
+			}
+			break
+		}
 		if err != nil || len(channels) > 0 {
 			t.Errorf("channel còn sót của prefix %s: %v (lỗi %v)", e.prefix, channels, err)
 		}
@@ -845,9 +861,8 @@ func TestShutdownClosesEverythingAndIsIdempotent(t *testing.T) {
 	if err := s.pubsub.Ping(ctx); !errors.Is(err, redis.ErrClosed) {
 		t.Fatalf("subscriber phải đã đóng, Ping trả %v", err)
 	}
-	if n := e.numSub(e.channel(room)); n != 0 {
-		t.Fatalf("NUMSUB %d, muốn 0", n)
-	}
+	// Redis dọn subscription của connection đã đóng một cách bất đồng bộ (khi nó đọc tới EOF), nên dùng waitUntil.
+	waitUntil(t, "NUMSUB về 0 sau shutdown", func() bool { return e.numSub(e.channel(room)) == 0 })
 	// HTTP server đã dừng: không nhận kết nối mới.
 	request, _ := http.NewRequestWithContext(ctx, http.MethodGet, s.URL()+"/leaderboard/x/top?n=1", bytes.NewReader(nil))
 	if response, err := http.DefaultClient.Do(request); err == nil {

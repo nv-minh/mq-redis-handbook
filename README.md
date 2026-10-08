@@ -27,17 +27,17 @@ Handbook có 9 chủ đề, mỗi chủ đề một `theory.md`, cùng 26 lab (c
 Mỗi lab và use case có `README.md`, phiên bản TypeScript và phiên bản Go, và test chạy với broker thật qua Docker.
 Chủ đề 09 là phần tổng hợp: bảng chọn công nghệ Redis, RabbitMQ, Kafka, NATS và bốn hệ thống nhỏ ghép các chương trước.
 
-| #   | Số lab hoặc use case | Cần gì để chạy                                                                                          |
-| --- | -------------------- | ------------------------------------------------------------------------------------------------------- |
-| 01  | 2 lab                | Không cần broker hay Docker                                                                             |
-| 02  | 3 lab                | Redis                                                                                                   |
-| 03  | 3 lab                | Redis                                                                                                   |
-| 04  | 3 lab                | Lab 01 và 02 cần profile `sentinel` và `cluster`, lab 03 chỉ cần Redis                                  |
-| 05  | 3 lab                | RabbitMQ                                                                                                |
-| 06  | 3 lab                | Kafka                                                                                                   |
-| 07  | 3 lab                | NATS                                                                                                    |
-| 08  | 6 lab                | Lab 01, 03, 04 cần Redis, lab 05 cần Postgres và RabbitMQ, lab 02 và 06 không cần broker                |
-| 09  | 4 use case           | Use case 1, 3, 4 cần Redis, use case 2 cần Postgres và Kafka (xem phần Postgres khi port 5432 bị chiếm) |
+| #   | Số lab hoặc use case | Cần gì để chạy                                                                                                                    |
+| --- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| 01  | 2 lab                | Không cần broker hay Docker                                                                                                       |
+| 02  | 3 lab                | Redis                                                                                                                             |
+| 03  | 3 lab                | Redis                                                                                                                             |
+| 04  | 3 lab                | Lab 01 và 02 cần profile `sentinel` và `cluster`, lab 03 chỉ cần Redis                                                            |
+| 05  | 3 lab                | RabbitMQ                                                                                                                          |
+| 06  | 3 lab                | Kafka                                                                                                                             |
+| 07  | 3 lab                | NATS                                                                                                                              |
+| 08  | 6 lab                | Lab 01, 03, 04 cần Redis, lab 05 cần Postgres, RabbitMQ và Redis (Redis giữ marker của test chaos), lab 02 và 06 không cần broker |
+| 09  | 4 use case           | Use case 1, 3, 4 cần Redis, use case 2 cần Postgres và Kafka (xem phần Postgres khi port 5432 bị chiếm)                           |
 
 ## Phiên bản
 
@@ -85,12 +85,13 @@ RabbitMQ series 4.3 có community support đến 2026-11-30, nên khi dùng ngo�
 Nếu đã cài sẵn `golangci-lint` trong `PATH` thì Makefile dùng bản đó.
 Sơ đồ Mermaid được kiểm tra bằng `@mermaid-js/mermaid-cli` (devDependency, tải Chrome khi `pnpm install`).
 `pnpm-workspace.yaml` có mục `allowBuilds` (cú pháp của pnpm 11), vì pnpm mặc định không chạy script cài đặt của dependency.
-Mỗi package trong mục này cần script cài đặt của nó chạy:
+Ba package sau cần script cài đặt của chúng chạy, nên được đặt `true`:
 
 - `@confluentinc/kafka-javascript` chạy `node-pre-gyp install` để có binary native cho client Kafka của TypeScript.
 - `esbuild` chạy script `postinstall` của nó, và `vite` (dùng bởi `vitest`) phụ thuộc vào `esbuild`.
 - `puppeteer` chạy script `postinstall` của nó, tải Chrome cho `mmdc` kiểm tra Mermaid.
 
+`msgpackr-extract` (bộ tăng tốc native tùy chọn mà `bullmq` kéo theo) được đặt `false` trong cùng mục: build script của nó KHÔNG được phép chạy và JavaScript thuần là phương án dự phòng.
 Đừng xóa mục này khỏi file.
 
 ## Bắt đầu nhanh

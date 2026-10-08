@@ -41,8 +41,8 @@ sequenceDiagram
     L->>R: SCAN 17 MATCH prefix:* COUNT 200
     R-->>L: cursor 0, [..., big]
     L->>R: MEMORY USAGE big
-    R-->>L: 1048640
-    Note over L: cursor 0: xong, trả [big] vì 1048640 >= ngưỡng
+    R-->>L: 1310770
+    Note over L: cursor 0: xong, trả [big] vì 1310770 >= ngưỡng
 ```
 
 ## Giao diện
@@ -59,7 +59,7 @@ Go (`go/lab.go`):
 func FindBigKeys(ctx context.Context, rdb redis.UniversalClient, thresholdBytes int64, match string) ([]string, error)
 ```
 
-Task gốc quy định `findBigKeys(rdb, thresholdBytes)`.
+Giao diện chính của lab là `findBigKeys(rdb, thresholdBytes)`.
 Lab thêm tham số `match` (glob, mặc định `*`) để mỗi test chỉ quét key do chính nó tạo.
 Test không bao giờ khẳng định về kết quả quét toàn server, vì Redis dùng chung với các lab khác.
 

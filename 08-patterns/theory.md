@@ -12,7 +12,7 @@ Sáu lab đi kèm, mỗi lab có test cùng tên ở TypeScript và Go:
 - [Lab 05 - Transactional outbox: Postgres và RabbitMQ](./lab-05-outbox/README.md)
 - [Lab 06 - Saga: orchestration và compensation](./lab-06-saga/README.md)
 
-Phiên bản đã dùng: Redis 8.10.2 (lab 01 đến 04), RabbitMQ 4.3.6 và PostgreSQL 18.6 (lab 05), kiểm tra ngày 2026-10-06.
+Phiên bản đã dùng: Redis 8.10.2 (lab 01, 03, 04, và lab 05 cho marker của test chaos), RabbitMQ 4.3.6 và PostgreSQL 18.6 (lab 05), kiểm tra ngày 2026-10-06.
 Lab 02 và lab 06 không cần broker.
 
 ## Các pattern trong một luồng đặt hàng
@@ -128,7 +128,7 @@ Thứ tự: thứ tự publish theo thứ tự service gửi (microservices.io),
 Thứ tự id chỉ trùng thứ tự chèn khi các transaction commit theo đúng thứ tự id: `bigserial` cấp id lúc INSERT nhưng dòng chỉ hiện ra lúc COMMIT, nên ngay cả một relay vẫn có thể publish id nhỏ sau id lớn khi hai transaction commit đảo thứ tự.
 Nghiên cứu của handbook ghi "với nhiều relay chạy song song thì thứ tự bị mất" là chưa xác minh bằng nguồn riêng.
 Lab 05 đo nó: relay A khóa dòng 1 và 2 rồi đứng chờ, relay B publish dòng 3 và 4 trước vì `SKIP LOCKED` bỏ qua dòng đang bị khóa, nên thứ tự publish là 3, 4, 1, 2.
-Kết luận chỉ áp dụng cho thiết kế này: muốn giữ thứ tự theo entity thì dùng một relay hoặc claim theo aggregate.
+Kết luận chỉ áp dụng cho thiết kế này: muốn giữ thứ tự theo entity thì dùng một relay hoặc claim theo aggregate, và cho các transaction của cùng aggregate commit tuần tự.
 
 ## Saga
 
@@ -248,7 +248,7 @@ Không pattern nào đứng một mình: idempotent consumer là điều kiện 
 - Poison message chặn queue: một message luôn làm consumer lỗi, được trả lại queue và xử lý vô hạn.
   Hãy giới hạn số lần giao rồi chuyển vào DLQ, cảnh báo khi DLQ có message, và đặt retention của DLQ dài hơn queue gốc.
 - Thứ tự bị mất khi chạy nhiều relay hoặc nhiều worker: lab 04 và lab 05 đều không giữ thứ tự giữa các consumer hoặc relay.
-  Hãy dùng một relay, claim theo aggregate, hoặc để broker giữ thứ tự theo key.
+  Hãy dùng một relay (kèm các transaction của cùng aggregate commit tuần tự), claim theo aggregate, hoặc để broker giữ thứ tự theo key.
 - Saga báo thành công giả: compensation lỗi bị nuốt khiến hệ thống lệch mà không ai biết.
   Hãy báo lỗi compensation, retry compensation rồi chuyển cho người vận hành, và viết compensation idempotent.
 - Lock hết hạn khi đang giữ lock cũng gây xử lý trùng, nhưng chủ đề này thuộc chương 09 (distributed lock).

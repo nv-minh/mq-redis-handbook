@@ -76,7 +76,7 @@ NewProducer(balancer kafka.Balancer) *Producer // nil là balancer mặc định
 ReadTopic(ctx, topic) ([]Record, error) // reader không group, từng partition, dừng theo ListOffsets
 ```
 
-Hai bên khác nhau ở chỗ `produceKeyed` của TypeScript là hàm dùng một producer chung (đúng chữ ký của đề bài), còn Go cần giữ một `Producer` để chọn balancer, nên `ProduceKeyed` là method.
+Hai bên khác nhau ở chỗ `produceKeyed` của TypeScript là hàm dùng một producer chung (chữ ký gọn nhất), còn Go cần giữ một `Producer` để chọn balancer, nên `ProduceKeyed` là method.
 `produceUnkeyed` và `ProduceUnkeyed` là phần thêm cho test key null.
 
 ## Các điểm quan trọng

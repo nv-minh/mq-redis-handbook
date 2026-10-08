@@ -229,7 +229,7 @@ stateDiagram-v2
     InDlq --> [*]
 ```
 
-Các quyết định thiết kế của lab 03 (mỗi điểm đều có test, trừ lựa chọn `reject` thay `nack` chỉ là sở thích về cờ `multiple`):
+Các quyết định thiết kế của lab 03 (các điểm dưới đây đều có test, trừ hai đường lỗi của chặng cuối: publish sang DLQ không được confirm dẫn tới `reject(requeue=true)`, và bản trùng trong DLQ khi worker chết giữa confirm và ack; lựa chọn `nack` hay `reject` tương đương nhau và đã có test):
 
 - `maxRetries` là số lần retry sau lần xử lý đầu tiên, nên khi không có crash và publish sang DLQ không thất bại thì handler chạy `maxRetries + 1` lần.
   `maxRetries = 0` nghĩa là lỗi đầu tiên đi thẳng vào DLQ.

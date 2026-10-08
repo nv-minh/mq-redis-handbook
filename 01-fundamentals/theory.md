@@ -200,7 +200,7 @@ Nguồn: https://kafka.apache.org/41/design/design/
 Nguồn: https://www.rabbitmq.com/docs/confirms
 Nguồn: https://redis.io/docs/latest/develop/data-types/streams/
 
-[Lab 02](./lab-02-backpressure/README.md) dựng bounded queue với `publish` chờ khi đầy, và chứng minh `size()` không bao giờ vượt capacity kể cả với `capacity = 1`.
+[Lab 02](./lab-02-backpressure/README.md) dựng bounded queue với `publish` chờ khi đầy, và chứng minh `size()` không bao giờ vượt capacity khi consumer chậm (test dùng `capacity = 3`), còn `capacity = 1` được kiểm tra ở test `publish_blocks_when_queue_full`.
 
 ## Acknowledgements
 

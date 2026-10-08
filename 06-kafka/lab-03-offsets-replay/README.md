@@ -96,7 +96,7 @@ Mặc định `auto.offset.reset` của Java và librdkafka là `latest`, còn `
 
 Điều kiện dừng của replay không dùng sleep: tổng (offset cuối - offset đầu) của các partition lúc bắt đầu là số message phải đọc.
 TypeScript lấy từ `admin.fetchTopicOffsets` (high trừ low), Go lấy từ `ListOffsets` (`LastOffsetOf` trừ `FirstOffsetOf`).
-Topic rỗng cho 0 nên hàm trả về mảng rỗng ngay mà không join group, và test `replay_of_an_empty_topic_returns_an_empty_list` (thêm vào ngoài đề bài) kiểm tra điều đó.
+Topic rỗng cho 0 nên hàm trả về mảng rỗng ngay mà không join group, và test `replay_of_an_empty_topic_returns_an_empty_list` (test bổ sung) kiểm tra điều đó.
 Thứ tự của kết quả replay không xác định giữa các partition nên test so sánh sau khi sắp xếp.
 
 Lab không commit trong `replayFromBeginning`, nên chạy lại với cùng group id vẫn đọc lại từ đầu.

@@ -104,7 +104,7 @@ Lab 01 chứng minh điều này (test chỉ có ở Go): sáu message cùng key
 Muốn Go và TypeScript đưa cùng key vào cùng partition thì phải dùng `Murmur2Balancer`, và trong lab hai bên cho cùng mapping (một lần đo trên topic 3 partition: `alice` và `bob` vào partition 0, `dave` vào 1, `carol` và `erin` vào 2).
 Đổi số partition của topic đã dùng key làm vỡ quan hệ key-partition, nên hãy tính dư partition từ đầu.
 
-Idempotent producer: broker gán producer ID và khử trùng bằng sequence number, nên retry không tạo bản ghi trùng trong log của partition.
+Idempotent producer: broker gán producer ID và loại bản trùng bằng sequence number, nên retry không tạo bản ghi trùng trong log của partition.
 Điều kiện là `acks=all`, `retries > 0` và `max.in.flight.requests.per.connection <= 5`, khi đó thứ tự được giữ.
 Idempotence chỉ phủ một producer session và một partition; muốn xuyên session phải có `transactional.id`.
 Producer Java 4.x mặc định bật idempotence, nhưng librdkafka và kafka-javascript mặc định tắt (lab TypeScript bật tường minh), và kafka-go không có idempotent producer.

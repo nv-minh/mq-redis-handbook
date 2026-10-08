@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Validate handbook docs. Usage: scripts/check-docs.sh <topic-dir>...
 # Per topic dir:
-#   - every lab-*/README.md has a ```mermaid block
+#   - every lab-*/README.md and usecase-*/README.md has a ```mermaid block
 #   - theory.md has a flowchart, a sequenceDiagram and a "## Nguồn tham khảo" section
 #   - no .md file contains an em dash
 # Exits 1 and prints the offending file for every violation. No arguments is not an error.
@@ -22,8 +22,8 @@ for dir in "$@"; do
     continue
   fi
 
-  # Lab READMEs need at least one mermaid diagram.
-  for readme in "$dir"/lab-*/README.md; do
+  # Lab and use case READMEs need at least one mermaid diagram.
+  for readme in "$dir"/lab-*/README.md "$dir"/usecase-*/README.md; do
     [ -e "$readme" ] || continue
     grep -q '^```mermaid' "$readme" || fail "$readme" "missing a \`\`\`mermaid block"
   done

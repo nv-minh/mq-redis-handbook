@@ -1,12 +1,14 @@
 package lab
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"regexp"
@@ -406,9 +408,10 @@ func TestClientOnInstanceAReceivesMessageSentViaInstanceB(t *testing.T) {
 
 	// Sẵn sàng một cách xác định: cả hai instance đã subscribe channel của phòng (PUBSUB NUMSUB = 2).
 	waitUntil(t, "cả hai instance subscribe channel của phòng", func() bool { return e.numSub(e.channel(room)) == 2 })
-	if instanceA.ClientCount(room) != 1 || instanceB.ClientCount(room) != 1 {
-		t.Fatalf("mỗi instance phải có đúng 1 client: A=%d B=%d", instanceA.ClientCount(room), instanceB.ClientCount(room))
-	}
+	// Client được đăng ký vào phòng SAU khi Accept trả về, tức có thể sau khi Dial của client đã xong.
+	waitUntil(t, "mỗi instance có đúng 1 client trong phòng", func() bool {
+		return instanceA.ClientCount(room) == 1 && instanceB.ClientCount(room) == 1
+	})
 
 	before := time.Now().UnixMilli()
 	e.sendText(bob, "hello from B")
@@ -501,7 +504,7 @@ func TestLeaderboardTopReturnsScoresInDescendingOrder(t *testing.T) {
 	}
 
 	// POST là "đặt score" (ZADD), không phải cộng dồn: cập nhật alice từ 10 lên 40 đưa nó lên đầu,
-	// và POST lần nữa với 15 đặt lại đúng 15 (nếu là ZINCRBY thì sẽ ra 55).
+	// và POST lần nữa với 15 đặt lại đúng 15 (nếu là ZINCRBY thì sẽ ra 10 + 40 + 15 = 65).
 	if status := postScore(t, instanceB, "season1", `{"member":"alice","score":40}`); status != http.StatusOK {
 		t.Fatalf("POST cập nhật alice: %d", status)
 	}
@@ -551,9 +554,9 @@ func TestDisconnectedClientIsRemovedFromRoom(t *testing.T) {
 	abrupt := e.dial(instanceA, room, "abrupt", nil)
 	stayer := e.dial(instanceB, room, "stayer", nil)
 	waitUntil(t, "hai instance subscribe channel", func() bool { return e.numSub(channel) == 2 })
-	if instanceA.ClientCount(room) != 2 || instanceB.ClientCount(room) != 1 {
-		t.Fatalf("A=%d B=%d, muốn 2 và 1", instanceA.ClientCount(room), instanceB.ClientCount(room))
-	}
+	waitUntil(t, "A có 2 client và B có 1 client trong phòng", func() bool {
+		return instanceA.ClientCount(room) == 2 && instanceB.ClientCount(room) == 1
+	})
 
 	// Đóng lịch sự: có close handshake. Instance A bỏ client khỏi phòng nhưng còn abrupt nên vẫn subscribe.
 	if err := graceful.conn.Close(websocket.StatusNormalClosure, "bye"); err != nil {
@@ -659,6 +662,83 @@ func TestInvalidRoomIsRejectedWith400BeforeTheUpgrade(t *testing.T) {
 	waitUntil(t, "server không còn phòng nào", func() bool { return s.RoomCount() == 0 })
 }
 
+// rawUpgrade mở TCP socket thô và gửi một request upgrade với đúng các header cho trước (không dùng thư viện
+// websocket). Caller phải đóng connection.
+func rawUpgrade(t *testing.T, s *Server, room string, headers []string) net.Conn {
+	t.Helper()
+	conn, err := net.DialTimeout("tcp", strings.TrimPrefix(s.URL(), "http://"), 5*time.Second)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	request := "GET /ws?room=" + room + " HTTP/1.1\r\nHost: " + strings.TrimPrefix(s.URL(), "http://") + "\r\n" +
+		strings.Join(headers, "\r\n") + "\r\n\r\n"
+	if _, err := conn.Write([]byte(request)); err != nil {
+		_ = conn.Close()
+		t.Fatalf("ghi request: %v", err)
+	}
+	return conn
+}
+
+func TestRejectedOrAbandonedHandshakeDoesNotLeakARoomSubscription(t *testing.T) {
+	e := newEnv(t, "leak")
+	s := e.startServer(nil)
+	room := "leak-room"
+	channel := e.channel(room)
+	valid := []string{
+		"Upgrade: websocket",
+		"Connection: Upgrade",
+		"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==",
+		"Sec-WebSocket-Version: 13",
+	}
+	replace := func(prefix, with string) []string {
+		var out []string
+		for _, h := range valid {
+			if strings.HasPrefix(h, prefix) {
+				if with != "" {
+					out = append(out, with)
+				}
+				continue
+			}
+			out = append(out, h)
+		}
+		return out
+	}
+	for _, c := range []struct {
+		label   string
+		headers []string
+	}{
+		{"thiếu Sec-WebSocket-Key", replace("Sec-WebSocket-Key", "")},
+		{"Sec-WebSocket-Version sai", replace("Sec-WebSocket-Version", "Sec-WebSocket-Version: 99")},
+		{"Upgrade không phải websocket", replace("Upgrade", "Upgrade: h2c")},
+	} {
+		conn := rawUpgrade(t, s, room, c.headers)
+		if err := conn.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+			t.Fatalf("SetReadDeadline: %v", err)
+		}
+		response, err := http.ReadResponse(bufio.NewReader(conn), nil)
+		if err != nil {
+			_ = conn.Close()
+			t.Fatalf("%s: đọc phản hồi: %v", c.label, err)
+		}
+		_ = response.Body.Close()
+		_ = conn.Close()
+		if response.StatusCode < 400 || response.StatusCode > 499 {
+			t.Fatalf("%s: muốn HTTP 4xx, nhận %d", c.label, response.StatusCode)
+		}
+		// Handshake bị từ chối thì chỗ trong phòng (và subscription) phải được trả lại.
+		waitUntil(t, c.label+": instance bỏ phòng", func() bool { return s.RoomCount() == 0 })
+		waitUntil(t, c.label+": NUMSUB về 0", func() bool { return e.numSub(channel) == 0 })
+	}
+
+	// Client gửi upgrade hợp lệ rồi đóng TCP ngay: tùy thời điểm server thấy request trước hay sau khi socket
+	// đóng, nhưng kết quả phải luôn như nhau: không phòng nào bị giữ lại.
+	for range 5 {
+		_ = rawUpgrade(t, s, room, valid).Close()
+	}
+	waitUntil(t, "instance không giữ phòng nào sau khi client bỏ đi", func() bool { return s.RoomCount() == 0 })
+	waitUntil(t, "NUMSUB về 0 sau khi client bỏ đi", func() bool { return e.numSub(channel) == 0 })
+}
+
 func TestCrossOriginUpgradeIsRejectedButSameOriginAndNoOriginAreAllowed(t *testing.T) {
 	e := newEnv(t, "origin")
 	s := e.startServer(nil)
@@ -754,9 +834,7 @@ func TestSlowClientIsDroppedWithoutBlockingOthers(t *testing.T) {
 	stuck := e.dialStuck(s, room)
 	fast := e.dial(s, room, "fast", nil)
 	waitUntil(t, "instance subscribe channel", func() bool { return e.numSub(e.channel(room)) == 1 })
-	if s.ClientCount(room) != 2 {
-		t.Fatalf("muốn 2 client, nhận %d", s.ClientCount(room))
-	}
+	waitUntil(t, "instance có 2 client trong phòng", func() bool { return s.ClientCount(room) == 2 })
 
 	// Gửi từng đợt nhỏ và chờ client nhanh nhận hết đợt đó trước khi gửi tiếp, nên hàng đợi của client nhanh
 	// không bao giờ vượt một đợt. Client kẹt không đọc, nên socket của nó đầy rồi hàng đợi của nó đầy.
@@ -803,14 +881,12 @@ func TestSlowClientIsDroppedWithoutBlockingOthers(t *testing.T) {
 
 func TestUnresponsiveClientIsDroppedByHeartbeat(t *testing.T) {
 	e := newEnv(t, "hb")
-	s := e.startServer(func(o *Options) { o.PingInterval = 50 * time.Millisecond })
+	s := e.startServer(func(o *Options) { o.PingInterval = 200 * time.Millisecond })
 	room := "heartbeat"
 	// Client kẹt không bao giờ trả pong (không gọi Read). Client khỏe (đang Read) tự trả pong nên ở lại.
 	e.dialStuck(s, room)
 	healthy := e.dial(s, room, "healthy", nil)
-	if s.ClientCount(room) != 2 {
-		t.Fatalf("muốn 2 client, nhận %d", s.ClientCount(room))
-	}
+	waitUntil(t, "instance có 2 client trong phòng", func() bool { return s.ClientCount(room) == 2 })
 	waitUntil(t, "heartbeat bỏ client không trả pong", func() bool { return s.ClientCount(room) == 1 })
 	e.sendText(healthy, "still here")
 	e.waitMessages(healthy, 1, "client khỏe vẫn nhận message")

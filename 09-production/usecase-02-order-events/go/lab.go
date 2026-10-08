@@ -316,7 +316,10 @@ var ErrInvalidBatchSize = errors.New("batchSize không hợp lệ")
 // At-least-once: nếu process chết sau publish và trước COMMIT, Postgres rollback transaction, nhả lock và dòng
 // quay lại trạng thái chưa publish, nên lượt sau publish lại event đó với CÙNG EventID. Consumer phải dedupe.
 // Nếu publish trả lỗi, cả batch ROLLBACK và lỗi được trả ra. Đổi lại, transaction (và lock) mở suốt thời gian publish.
-// Chỉ một relay duy nhất mới giữ được thứ tự theo order: nhiều relay song song với SKIP LOCKED có thể publish đảo thứ tự.
+// Thứ tự: nhiều relay song song với SKIP LOCKED có thể publish đảo thứ tự, và một relay là điều kiện cần chứ chưa đủ
+// (hai transaction commit đảo thứ tự id vẫn có thể làm id nhỏ được publish sau id lớn, xem chương 08 lab 05). Thứ tự mà use case
+// này cần đến từ chỗ khác: event của một order cùng key nên cùng partition, và event follow-up chỉ được ghi sau khi event
+// trước đó đã được publish và consumer đã xử lý nó (quan hệ nhân quả).
 func RunRelay(ctx context.Context, pool *pgxpool.Pool, publish PublishFn, batchSize int) (int, error) {
 	if batchSize < 1 {
 		return 0, fmt.Errorf("%w: phải là số nguyên dương, nhận %d", ErrInvalidBatchSize, batchSize)

@@ -325,7 +325,7 @@ Nếu Postgres của bạn không ở cổng 5432 (ví dụ `POSTGRES_PORT=5439 
 ## Kết quả mong đợi
 
 Test (cùng ý nghĩa ở TS và Go, Go dùng CamelCase).
-Năm test đầu là năm test của đề bài.
+Năm test đầu là năm hành vi cốt lõi của use case.
 
 | Test                                                                                | Chứng minh                                                                                                                                                                                                           |
 | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -344,7 +344,7 @@ Năm test đầu là năm test của đề bài.
 | `sku_length_counts_code_points_not_utf16_units`                                     | 64 ký tự ngoài BMP được nhận, 65 bị từ chối, giống nhau ở hai ngôn ngữ                                                                                                                                               |
 | `parse_event_treats_order_placed_without_valid_amount_as_poison`                    | `OrderPlaced` thiếu, null hoặc sai kiểu `amount` là poison (Go: `TestParseEventTreatsOrderPlacedWithoutValidAmountAsPoison`)                                                                                         |
 
-Chaos test (kèm các bước bảo vệ như chương 08, ruling R19): relay chạy trong một process con thật (TypeScript: `node --import tsx ts/chaos-worker.ts`, Go: chạy lại chính test binary ở chế độ helper process), publish lên Kafka với acks=all, ghi marker vào một bảng của chính schema (không dùng Redis) rồi treo trước khi đánh dấu.
+Chaos test (kèm các bước bảo vệ như chương 08: chaos test của các chương này giết một process, không bao giờ dừng container của broker): relay chạy trong một process con thật (TypeScript: `node --import tsx ts/chaos-worker.ts`, Go: chạy lại chính test binary ở chế độ helper process), publish lên Kafka với acks=all, ghi marker vào một bảng của chính schema (không dùng Redis) rồi treo trước khi đánh dấu.
 Process cha chờ marker bằng `eventually`, kiểm tra child thoát sớm để báo lỗi ngay kèm stderr của child, gửi SIGKILL, reap child và có thời hạn tự thoát 60 giây để không bao giờ thành process mồ côi.
 Use case không dừng container nào của hạ tầng.
 
@@ -377,7 +377,9 @@ Các con số dưới đây do test, demo và các lần thử khi viết use ca
   Use case giả lập cổng thanh toán bằng luật amount vượt hạn mức, nên phần này chưa được làm.
 - Thứ tự chỉ có trong một key.
   Event của một order nằm trong một partition và đúng thứ tự, nhưng giữa các order không có thứ tự toàn cục.
-  Chỉ MỘT relay mới giữ thứ tự publish: nhiều relay chạy song song với `SKIP LOCKED` có thể đảo thứ tự (lab 08-05 đo điều này), nên use case chạy một relay.
+  Nhiều relay chạy song song với `SKIP LOCKED` có thể đảo thứ tự publish (lab 08-05 đo điều này), nên use case chạy một relay.
+  Một relay là điều kiện cần, chưa đủ: hai transaction commit đảo thứ tự id vẫn có thể làm id nhỏ được publish sau id lớn (chương 08).
+  Thứ tự mà use case này cần đến từ chỗ khác: cùng key thì cùng partition, và event follow-up (ví dụ `PaymentFailed`) chỉ được ghi sau khi event trước đó đã được publish và consumer đã xử lý nó, nên nó luôn nằm sau trong partition (quan hệ nhân quả).
   Muốn nhiều relay thì phải claim theo aggregate (chưa xác minh bằng nguồn riêng, suy luận thiết kế) hoặc chấp nhận event của cùng order tới đảo thứ tự và để consumer chịu được.
 - Transaction và row lock của relay mở suốt thời gian publish (xem lab 08-05).
   Relay chậm hoặc batch lớn giữ lock lâu, đổi lại không có trạng thái "đã nhận nhưng chưa gửi" nào cần dọn.

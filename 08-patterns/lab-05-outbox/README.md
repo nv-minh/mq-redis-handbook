@@ -122,7 +122,7 @@ Lab này đo nó bằng test `several_relays_with_skip_locked_do_not_preserve_in
 Relay A khóa dòng 1 và 2 rồi đứng chờ ở event đầu, relay B chạy trọn vẹn trong lúc đó: `SKIP LOCKED` bỏ qua dòng 1 và 2 nên B publish dòng 3 và 4 trước.
 Thứ tự publish quan sát được là 3, 4, 1, 2.
 Test dùng cổng (gate) chứ không dùng thời gian nên kết quả này xác định, không phải may rủi.
-Kết luận chỉ áp dụng cho thiết kế này: muốn giữ thứ tự theo entity thì dùng một relay, hoặc partition theo `aggregate_id` (claim theo aggregate), hoặc để broker giữ thứ tự theo key như Kafka.
+Kết luận chỉ áp dụng cho thiết kế này: muốn giữ thứ tự theo entity thì dùng một relay và cho các transaction của cùng aggregate commit tuần tự, hoặc partition theo `aggregate_id` (claim theo aggregate), hoặc để broker giữ thứ tự theo key như Kafka.
 
 Event id và dedupe.
 Event id đi vào thuộc tính `messageId` của AMQP, đúng ý Debezium là đặt `id` vào header để consumer phát hiện trùng.

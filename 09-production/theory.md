@@ -352,7 +352,9 @@ sequenceDiagram
   Use case chọn dedup theo `eventId`, và không dùng transaction của Kafka vì kafka-go v0.4.51 không có API transaction trong `Writer` (chưa xác minh tuyệt đối).
 - Dedup trong transaction chỉ bảo vệ effect nằm cùng database.
   Với cổng thanh toán thật (HTTP ra ngoài) lời gọi phải mang idempotency key ổn định (header `Idempotency-Key` của Stripe) và cần thêm trạng thái "đang xử lý".
-- Chỉ MỘT relay mới giữ thứ tự publish: chương 08 lab 05 đo rằng hai relay với `SKIP LOCKED` publish theo thứ tự 3, 4, 1, 2.
+- Nhiều relay không giữ thứ tự publish: chương 08 lab 05 đo rằng hai relay với `SKIP LOCKED` publish theo thứ tự 3, 4, 1, 2.
+  Một relay là điều kiện cần, chưa đủ, vì hai transaction commit đảo thứ tự id vẫn có thể đảo thứ tự publish (chương 08).
+  Thứ tự use case này cần đến từ quan hệ nhân quả: cùng key thì cùng partition, và event follow-up chỉ được ghi sau khi event trước đã được publish và xử lý.
 - Compensation cũng có thể lỗi: ở đây nó là event handler, nên lỗi vĩnh viễn chặn partition và làm lag tăng.
   Use case không có ngưỡng thử lại tối đa hay đường escalate cho người vận hành.
 

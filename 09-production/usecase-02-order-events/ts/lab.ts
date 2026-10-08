@@ -293,7 +293,10 @@ export type PublishFn = (event: OutboxEvent) => Promise<void>;
  * At-least-once: nếu process chết sau publish và trước COMMIT, Postgres rollback transaction, nhả lock và dòng
  * quay lại trạng thái chưa publish, nên lượt sau publish lại event đó với CÙNG `eventId`. Consumer phải dedupe.
  * Nếu `publish` ném lỗi, cả batch ROLLBACK và lỗi được ném ra. Đổi lại, transaction (và lock) mở suốt thời gian publish.
- * Chỉ một relay duy nhất mới giữ được thứ tự theo order: nhiều relay song song với SKIP LOCKED có thể publish đảo thứ tự.
+ * Thứ tự: nhiều relay song song với SKIP LOCKED có thể publish đảo thứ tự, và một relay là điều kiện cần chứ chưa đủ
+ * (hai transaction commit đảo thứ tự id vẫn có thể làm id nhỏ được publish sau id lớn, xem chương 08 lab 05). Thứ tự mà use case
+ * này cần đến từ chỗ khác: event của một order cùng key nên cùng partition, và event follow-up chỉ được ghi sau khi event
+ * trước đó đã được publish và consumer đã xử lý nó (quan hệ nhân quả).
  */
 export async function runRelay(
   pool: pg.Pool,

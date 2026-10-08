@@ -54,15 +54,15 @@ Research không có số throughput so sánh giữa các hệ thống, nên bả
 
 ### Bảng 1 - Mô hình, đảm bảo giao, thứ tự, replay
 
-| Công nghệ                          | Mô hình                                             | Đảm bảo giao                                                   | Thứ tự                                                   | Replay và retention                                                                                       |
-| ---------------------------------- | --------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Redis Pub/Sub                      | Pub/sub, không lưu message                          | At-most-once                                                   | Đúng thứ tự publish trên một channel                     | Không, subscriber vào muộn không đọc lại được gì                                                          |
-| Redis List (`BLMOVE` + processing) | Queue tự dựng trên list                             | At-least-once, phần recover tự viết                            | FIFO                                                     | Không, message bị lấy ra khỏi queue                                                                       |
-| Redis Streams (consumer group)     | Log kèm consumer group                              | At-least-once mặc định, at-most-once với `NOACK`               | Theo ID tăng dần của stream                              | Có, entry giữ tới khi trim hoặc `XDEL`                                                                    |
-| RabbitMQ (quorum queue)            | Exchange route vào queue, message xóa sau ack       | At-least-once với manual ack và publisher confirms             | Trong một queue với một consumer, requeue làm đổi thứ tự | Queue không replay, stream type replay theo offset và giữ theo `x-max-age` hoặc `x-max-length-bytes`      |
-| Kafka                              | Log chia partition, consumer giữ offset             | At-least-once mặc định, exactly-once chỉ trong phạm vi Kafka   | Trong một partition, cùng key thì cùng partition         | Có, `retention.ms` mặc định 168 giờ, hoặc compaction giữ giá trị cuối của mỗi key                         |
-| NATS core                          | Pub/sub theo subject, không lưu message             | At-most-once                                                   | Chưa xác minh trong research                             | Không, không có subscriber thì message bị bỏ                                                              |
-| NATS JetStream                     | Stream theo subject, consumer là cursor phía server | At-least-once với ack explicit, dedup phía publish có giới hạn | Theo sequence của stream, redelivery có thể đảo thứ tự   | Có, theo retention policy `limits`, `interest` hoặc `workqueue`, consumer mới đọc lại bằng deliver policy |
+| Công nghệ                          | Mô hình                                             | Đảm bảo giao                                                   | Thứ tự                                                   | Replay và retention                                                                                                                                                                                                             |
+| ---------------------------------- | --------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Redis Pub/Sub                      | Pub/sub, không lưu message                          | At-most-once                                                   | Đúng thứ tự publish trên một channel                     | Không, subscriber vào muộn không đọc lại được gì                                                                                                                                                                                |
+| Redis List (`BLMOVE` + processing) | Queue tự dựng trên list                             | At-least-once, phần recover tự viết                            | FIFO                                                     | Không, message bị lấy ra khỏi queue                                                                                                                                                                                             |
+| Redis Streams (consumer group)     | Log kèm consumer group                              | At-least-once mặc định, at-most-once với `NOACK`               | Theo ID tăng dần của stream                              | Có, entry giữ tới khi trim hoặc `XDEL`                                                                                                                                                                                          |
+| RabbitMQ (quorum queue)            | Exchange route vào queue, message xóa sau ack       | At-least-once với manual ack và publisher confirms             | Trong một queue với một consumer, requeue làm đổi thứ tự | Queue không replay, stream type replay theo offset và giữ theo `x-max-age` hoặc `x-max-length-bytes`                                                                                                                            |
+| Kafka                              | Log chia partition, consumer giữ offset             | At-least-once mặc định, exactly-once chỉ trong phạm vi Kafka   | Trong một partition, cùng key thì cùng partition         | Có, broker mặc định giữ 168 giờ (`log.retention.hours`, topic đặt bằng `retention.ms`), retention xóa theo segment nên dữ liệu có thể sống lâu hơn (chưa xác minh bằng chạy thật), hoặc compaction giữ giá trị cuối của mỗi key |
+| NATS core                          | Pub/sub theo subject, không lưu message             | At-most-once                                                   | Chưa xác minh trong research                             | Không, không có subscriber thì message bị bỏ                                                                                                                                                                                    |
+| NATS JetStream                     | Stream theo subject, consumer là cursor phía server | At-least-once với ack explicit, dedup phía publish có giới hạn | Theo sequence của stream, redelivery có thể đảo thứ tự   | Có, theo retention policy `limits`, `interest` hoặc `workqueue`, consumer mới đọc lại bằng deliver policy                                                                                                                       |
 
 Nguồn của bảng 1: bảng so sánh ở chương [03](../03-redis-messaging/theory.md), chương [05](../05-rabbitmq/theory.md) (mục quorum, classic và stream), chương [06](../06-kafka/theory.md) (mục thứ tự, retention, transaction) và chương [07](../07-nats-jetstream/theory.md) (hai bảng so sánh).
 Các ô thứ tự của Pub/Sub và Streams cũng nằm trong [use case 4](./usecase-04-realtime/README.md).
@@ -82,20 +82,21 @@ Các ô thứ tự của Pub/Sub và Streams cũng nằm trong [use case 4](./us
 
 Nguồn của bảng 2: throughput lấy từ research (`docs/research/redis.md` về pipelining, `docs/research/rabbitmq.md` về prefetch và stream protocol, `docs/research/kafka.md` về partition và producer, `docs/research/nats.md` về `MaxAckPending`, async publish và replica), chi phí vận hành lấy từ các mục "Lỗi thường gặp" và "So sánh" của chương 03 đến 07, HA lấy từ chương [04](../04-redis-advanced/theory.md) (so sánh ba mô hình HA), chương 05, 06, 07 và research của RabbitMQ về ngày hết community support.
 Ô "mất message khi failover" của Redis là hệ quả của replication bất đồng bộ, đã được nêu ở chương 04.
+Cột "Chi phí vận hành" là nhận định của handbook (suy luận), giống cách chương 03 đã ghi, không phải câu trong tài liệu của nhà cung cấp.
 
 ### Bảng 3 - Hợp với và không nên dùng khi
 
-| Công nghệ      | Hợp với                                                                                                                            | Không nên dùng khi                                                                                                                                                                                           |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Redis Pub/Sub  | Chat trực tiếp, cập nhật chấp nhận mất, invalidate cache, tín hiệu "có việc mới" ([use case 4](./usecase-04-realtime/README.md))   | Dùng làm job queue, hoặc khi message phải tới nơi, hoặc khi client vào muộn cần lịch sử                                                                                                                      |
-| Redis List     | Job queue đơn giản, một nhóm worker, chấp nhận tự viết phần recover                                                                | Cần theo dõi pending, claim và replay (dùng Streams), hoặc cần retry theo lịch và DLQ đầy đủ (dùng thư viện job queue hoặc broker chuyên dụng)                                                               |
-| Redis Streams  | At-least-once, nhiều consumer chia việc, claim worker chết, replay gần realtime                                                    | Dữ liệu lớn hơn RAM của Redis (suy luận), cần retention dài với nhiều consumer độc lập (Kafka hợp hơn), hoặc không chấp nhận mất ghi gần nhất khi failover                                                   |
-| RabbitMQ       | Task queue, routing linh hoạt, retry và delay bằng DLX và TTL                                                                      | Cần giữ lịch sử event cho nhiều bên đọc độc lập rồi đọc lại (log hợp hơn, trừ khi dùng stream type), hoặc cần giữ thứ tự khi có nhiều consumer hay requeue (thứ tự chỉ giữ trong một queue với một consumer) |
-| Kafka          | Event stream, replay, nhiều consumer độc lập, thông lượng lớn, thứ tự theo key ([use case 2](./usecase-02-order-events/README.md)) | Task queue cần retry, delay và dead letter tinh vi (không có sẵn, phải tự dựng topic retry), hoặc cần thứ tự giữa các partition, hoặc exactly-once ra database                                               |
-| NATS core      | Request/reply, tín hiệu tạm, dữ liệu mất cũng được                                                                                 | Cần persistence: subscriber vắng mặt không nhận lại gì và publisher không báo lỗi                                                                                                                            |
-| NATS JetStream | Việc không được mất, replay, nhiều consumer độc lập, một server nhỏ gọn cho cả request/reply và stream                             | Cần dead-letter queue có sẵn (không có, chỉ có advisory sau MaxDeliver), hoặc cần routing kiểu exchange                                                                                                      |
+| Công nghệ      | Hợp với                                                                                                                                                                    | Không nên dùng khi                                                                                                                                                                                           |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Redis Pub/Sub  | Chat trực tiếp, cập nhật chấp nhận mất, invalidate cache, tín hiệu "có việc mới" ([use case 4](./usecase-04-realtime/README.md))                                           | Dùng làm job queue, hoặc khi message phải tới nơi, hoặc khi client vào muộn cần lịch sử                                                                                                                      |
+| Redis List     | Job queue đơn giản, một nhóm worker, chấp nhận tự viết phần recover                                                                                                        | Cần theo dõi pending, claim và replay (dùng Streams), hoặc cần retry theo lịch và DLQ đầy đủ (dùng thư viện job queue hoặc broker chuyên dụng)                                                               |
+| Redis Streams  | At-least-once, nhiều consumer chia việc, claim worker chết, replay gần realtime                                                                                            | Dữ liệu lớn hơn RAM của Redis (suy luận), cần retention dài với nhiều consumer độc lập (Kafka hợp hơn), hoặc không chấp nhận mất ghi gần nhất khi failover                                                   |
+| RabbitMQ       | Task queue, routing linh hoạt, retry và delay bằng DLX và TTL                                                                                                              | Cần giữ lịch sử event cho nhiều bên đọc độc lập rồi đọc lại (log hợp hơn, trừ khi dùng stream type), hoặc cần giữ thứ tự khi có nhiều consumer hay requeue (thứ tự chỉ giữ trong một queue với một consumer) |
+| Kafka          | Event stream, replay, nhiều consumer độc lập, retention dài, thứ tự theo key; thông lượng chưa có số đo trong research ([use case 2](./usecase-02-order-events/README.md)) | Task queue cần retry, delay và dead letter tinh vi (không có sẵn, phải tự dựng topic retry), hoặc cần thứ tự giữa các partition, hoặc exactly-once ra database                                               |
+| NATS core      | Request/reply, tín hiệu tạm, dữ liệu mất cũng được                                                                                                                         | Cần persistence: subscriber vắng mặt không nhận lại gì và publisher không báo lỗi                                                                                                                            |
+| NATS JetStream | Việc không được mất, replay, nhiều consumer độc lập, một server nhỏ gọn cho cả request/reply và stream                                                                     | Cần dead-letter queue có sẵn (không có, chỉ có advisory sau MaxDeliver), hoặc cần routing kiểu exchange                                                                                                      |
 
-Nguồn của bảng 3: cột "Hợp với" lấy từ dòng "Khi chọn" của các bảng so sánh ở chương 03, 05, 06, 07 và bảng so sánh Pub/Sub, Streams và broker chuyên dụng ở [use case 4](./usecase-04-realtime/README.md).
+Nguồn của bảng 3: cột "Hợp với" lấy từ dòng "Khi chọn" của các bảng so sánh ở chương 03, 05, 06, 07 (bỏ ý "thông lượng lớn" của Kafka, vì research không có số đo để xếp hạng) và bảng so sánh Pub/Sub, Streams và broker chuyên dụng ở [use case 4](./usecase-04-realtime/README.md).
 Cột "Không nên dùng khi" lấy từ các mục "Lỗi thường gặp" của chương tương ứng.
 Hai ô là suy luận của handbook: "dữ liệu lớn hơn RAM" của Streams (Redis giữ dữ liệu trong RAM, chương 02) và "cần routing kiểu exchange" của JetStream (RabbitMQ có exchange và binding, chương 05, còn JetStream route theo subject).
 
@@ -110,11 +111,13 @@ flowchart TD
     FO -->|"có"| PS["Redis Pub/Sub<br/>use case 4"]
     FO -->|"không"| NC["NATS core"]
     S -->|"không, phải tới nơi"| RP{"Cần đọc lại hoặc<br/>nhiều consumer độc lập?"}
-    RP -->|"có"| BIG{"Thông lượng lớn, retention dài,<br/>thứ tự theo key?"}
+    RP -->|"có"| BIG{"Retention dài, thứ tự theo key,<br/>nhiều consumer độc lập?"}
     BIG -->|"có"| KF["Kafka<br/>use case 2"]
     BIG -->|"không"| SM{"Muốn một server nhỏ gọn<br/>cho cả request/reply?"}
     SM -->|"có"| JS["NATS JetStream"]
-    SM -->|"không, đã có Redis và dữ liệu vừa RAM"| RS["Redis Streams"]
+    SM -->|"không"| RD{"Đã chạy Redis và<br/>dữ liệu vừa RAM?"}
+    RD -->|"có"| RS["Redis Streams"]
+    RD -->|"không"| RBS["RabbitMQ stream type<br/>(replay theo offset)"]
     RP -->|"không, chỉ chia việc"| TQ{"Cần routing, delay,<br/>retry và DLX tinh vi?"}
     TQ -->|"có"| RB["RabbitMQ"]
     TQ -->|"không"| RR{"Đã chạy Redis rồi?"}
@@ -126,7 +129,8 @@ Ba lời nhắc đi kèm sơ đồ:
 
 - Không có nhánh nào cho kết quả "nhanh nhất", vì research không có số đo để so sánh.
   Hãy đo trên tải thật của bạn trước khi quyết định theo throughput.
-- Có thể dùng nhiều công nghệ trong một hệ thống, và use case 2 là ví dụ: Postgres giữ trạng thái, Kafka giữ log event, Redis phục vụ cache và limiter.
+- Có thể dùng nhiều công nghệ trong một hệ thống, và use case 2 là ví dụ: nó dùng Postgres giữ trạng thái và Kafka giữ log event.
+  Một hệ thống thật có thể thêm Redis cho cache và limiter như use case 3.
 - Chọn theo mô hình trước, vận hành sau: queue xóa sau ack khác log giữ lại để đọc lại, và đổi mô hình giữa chừng đắt hơn đổi sản phẩm cùng mô hình.
   Câu cuối là suy luận của handbook.
 
@@ -645,7 +649,7 @@ Chương 08 nói rõ: ưu tiên operation idempotent tự nhiên (upsert theo bu
   Autoscale consumer mà không giới hạn tốc độ tới downstream chỉ chuyển quá tải sang dependency phía sau.
 - Use case 1: `concurrency` của worker chặn số job chạy cùng lúc, và queue depth là tín hiệu chính.
 - Use case 2: Kafka dùng mô hình pull nên consumer tự kéo theo nhịp của mình, và lag là thước đo của backlog.
-- Use case 3: rate limiter là backpressure phía producer (chặn client trước khi vào hệ thống).
+- Use case 3: rate limiter đóng vai backpressure phía producer, chặn client trước khi vào hệ thống (suy luận của handbook).
 - Use case 4: hàng đợi gửi có giới hạn cho mỗi client và chính sách hủy client chậm.
   Chính sách khác (bỏ message cũ nhất, gộp message, giảm tần suất) cũng hợp lệ và tùy ứng dụng.
 - Nhắc lại từ chương trước: RabbitMQ dùng prefetch, Redis Streams giới hạn bằng `MAXLEN` nhưng trim có thể xóa message chưa xử lý.
@@ -655,19 +659,20 @@ Chương 08 nói rõ: ưu tiên operation idempotent tự nhiên (upsert theo bu
 Mọi use case 1, 3, 4 chạy trong RAM của Redis, nên chi phí chính là bộ nhớ.
 Handbook không có số sizing, nên phần này chỉ liệt kê các nguồn phình và cách chặn đã nêu trong lab.
 
-| Nguồn phình                        | Use case | Cách chặn                                                                                               |
-| ---------------------------------- | -------- | ------------------------------------------------------------------------------------------------------- |
-| Completed và failed job giữ vô hạn | 1        | `removeOnComplete` và `removeOnFail` của BullMQ (lab đặt `count: 100` và `1000`), `Retention` của asynq |
-| Archive của asynq                  | 1        | Giới hạn 10000 task và 90 ngày, nên bằng chứng lỗi có hạn sử dụng                                       |
-| Sliding window log                 | 3        | O(limit) mỗi key, đo bộ nhớ trước khi chọn, hoặc đổi sang counter hay token bucket                      |
-| Cache key và negative caching      | 3        | TTL cho mọi key, và quyết định có cache `null` hay không                                                |
-| Bảng subscription của Pub/Sub      | 4        | Số subscription bằng số phòng đang có người, chưa xác minh chi phí khi hàng chục nghìn phòng            |
-| Dedup key bằng Redis (chương 08)   | 1, 4     | TTL phải lớn hơn cửa sổ redeliver, đặt TTL có chủ đích                                                  |
+| Nguồn phình                                                                 | Use case | Cách chặn                                                                                               |
+| --------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------- |
+| Completed và failed job giữ vô hạn                                          | 1        | `removeOnComplete` và `removeOnFail` của BullMQ (lab đặt `count: 100` và `1000`), `Retention` của asynq |
+| Archive của asynq                                                           | 1        | Giới hạn 10000 task và 90 ngày, nên bằng chứng lỗi có hạn sử dụng                                       |
+| Sliding window log                                                          | 3        | O(limit) mỗi key, đo bộ nhớ trước khi chọn, hoặc đổi sang counter hay token bucket                      |
+| Cache key và negative caching                                               | 3        | TTL cho mọi key, và quyết định có cache `null` hay không                                                |
+| Bảng subscription của Pub/Sub                                               | 4        | Số subscription bằng số phòng đang có người, chưa xác minh chi phí khi hàng chục nghìn phòng            |
+| Dedup key bằng Redis, nếu bạn tự thêm (bài tập 6 của use case 1, chương 08) | 1        | TTL phải lớn hơn cửa sổ redeliver, đặt TTL có chủ đích                                                  |
 
 - `maxmemory-policy` mặc định là `noeviction`: ghi mới trả `OOM`, đọc vẫn chạy.
   Đừng đặt queue chung instance với cache dùng `allkeys-lru`, vì job hoặc stream có thể bị evict.
   Hãy tách instance, hoặc dùng `noeviction` cho instance chứa queue.
-- Buffer của replica và AOF không được tính vào `maxmemory`, nên đặt `maxmemory` sát tổng RAM khi có replication hoặc AOF có thể bị OOM killer.
+- Buffer của replica và AOF không được tính vào `maxmemory`, nên phải chừa RAM trống.
+  Research ghi triệu chứng khi đặt `maxmemory` sát tổng RAM là process bị OOM killer, nhưng trang tài liệu chỉ nói buffer không được tính, nên phần hệ quả OOM killer là suy luận.
 - Giám sát `used_memory` trên `maxmemory` và đặt cảnh báo trước khi chạm trần.
 - Lab chạy Redis với `--save "" --appendonly no`, nên persistence (RDB, AOF) chỉ là lý thuyết ở chương 02 và dữ liệu mất khi Redis restart.
 
@@ -708,7 +713,7 @@ Hãy đo lại trên tải và hạ tầng của bạn.
 
 Hướng đi tiếp theo, theo thứ tự nên làm:
 
-1. Làm các bài tập mở rộng còn để trống trong README của bốn use case, đặc biệt các đường lỗi chưa có test: đứt subscriber connection và phương án Streams ở use case 4, kill worker bằng SIGKILL ở use case 1, hoàn tiền khi hết hàng ở use case 2, fencing token và cache cross-instance ở use case 3.
+1. Làm các bài tập mở rộng còn để trống trong README của bốn use case, đặc biệt các đường lỗi chưa có test: đứt subscriber connection và phương án Streams ở use case 4, đường worker chết đột ngột của use case 1 (đoạn chưa kiểm chứng trong README, chưa có bài tập riêng), hoàn tiền khi hết hàng ở use case 2, fencing token và cache cross-instance ở use case 3.
 2. Dựng topology nhiều node cho các chủ đề lab chỉ chạy một node: Sentinel hoặc Cluster để đo lock bị mất khi failover (use case 3), Kafka nhiều broker với `min.insync.replicas=2`, NATS JetStream R=3.
 3. Thay relay polling bằng CDC (Debezium Outbox Event Router) và so sánh về thứ tự và độ trễ với use case 2.
 4. Đọc sâu các nguồn gốc của những tranh luận trong chương: bài của Kleppmann và phản hồi của antirez về Redlock, bài của AWS về backoff và jitter, tài liệu Kafka về delivery semantics và design.
@@ -727,9 +732,11 @@ Các phần chưa xác minh được nêu rõ trong bài: thứ tự của NATS 
   Nguồn: https://redis.io/docs/latest/develop/pubsub/
   Nguồn: https://redis.io/docs/latest/develop/data-types/streams/
   Nguồn: https://redis.io/docs/latest/commands/lmove/
+  Nguồn: https://redis.io/docs/latest/develop/using-commands/pipelining/
 - RabbitMQ: quorum queue, stream, release information và ngày hết community support.
   Nguồn: https://www.rabbitmq.com/docs/quorum-queues
   Nguồn: https://www.rabbitmq.com/docs/streams
+  Nguồn: https://www.rabbitmq.com/docs/consumer-prefetch
   Nguồn: https://www.rabbitmq.com/release-information
 - Kafka: design, replication, KRaft và vận hành cơ bản.
   Nguồn: https://kafka.apache.org/43/design/design/
@@ -764,7 +771,7 @@ Các phần chưa xác minh được nêu rõ trong bài: thứ tự của NATS 
   Nguồn: https://learn.microsoft.com/en-us/azure/architecture/patterns/compensating-transaction
   Nguồn: https://docs.confluent.io/kafka/design/delivery-semantics.html
   Nguồn: https://docs.stripe.com/api/idempotent_requests
-  Nguồn: https://kafka.apache.org/41/operations/monitoring/
+  Nguồn: https://kafka.apache.org/41/operations/monitoring/ (trang của Kafka 4.1, research chưa có bản 4.3 của trang này)
   Nguồn: https://github.com/linkedin/Burrow
 - Use case 3: rate limiting, lock, tranh luận Redlock, cache-aside, singleflight.
   Nguồn: https://redis.io/tutorials/howtos/ratelimiting/

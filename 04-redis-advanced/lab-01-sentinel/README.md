@@ -66,7 +66,7 @@ startService(service: string): Promise<unknown>; // docker compose -p mq-handboo
 
 Go (`go/lab.go`, `go/chaos.go`): `ConnectViaSentinel() *redis.Client` (dùng `redis.NewFailoverClient`), `CurrentMaster(ctx)`, `ReadTopology(ctx)` với `Topology.Healthy()`, `HostAddr`, `Dialer`, `StopService(ctx, service)` và `StartService(ctx, service)`.
 
-Task gốc chỉ quy định `connectViaSentinel`.
+Giao diện chính của lab chỉ gồm `connectViaSentinel`.
 Lab thêm `currentMaster`, `readTopology`, `isHealthy` để test tìm master hiện tại và kiểm tra topology khỏe, và `chaos` để dừng và khởi động container.
 
 ## natMap và Dialer

@@ -188,7 +188,7 @@ HTTP và WebSocket, giống hệt nhau ở cả hai ngôn ngữ:
 | `POST /leaderboard/:name`           | Body `{"member": string, "score": number}`. Đặt score của member (ZADD). Trả 200 `{name, member, score}` |
 | `GET /leaderboard/:name/top?n=<n>`  | Trả 200 `{name, entries: [{member, score}]}` giảm dần theo score. `n` mặc định 10, hợp lệ từ 1 đến 1000  |
 
-Đề bài viết route đọc là `GET /leaderboard/top?n=`, nhưng route đó không nói bảng nào.
+Route đọc đơn giản nhất là `GET /leaderboard/top?n=`, nhưng route đó không nói bảng nào.
 Lab giữ nguyên dạng của route ghi `POST /leaderboard/:name` và đặt tên bảng vào đường dẫn: `GET /leaderboard/:name/top?n=`.
 Hai route cùng một tiền tố `/leaderboard/:name` nên dễ nhớ, và không bị lẫn một bảng tên `top` với route đọc.
 

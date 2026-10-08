@@ -7,7 +7,7 @@ Tạo một stream JetStream (storage memory) và một durable pull consumer v�
 - Durable consumer resume sau khi mất kết nối: stream có N message, consumer nhận K message và ack, connection bị đóng, một connection mới bind vào cùng durable và nhận đúng N-K message còn lại, không nhận lại message đã ack.
 - Message không ack được giao lại sau AckWait: worker nhận message mà không ack, hết AckWait thì server giao lại với delivery count 2 (`redelivered` là true).
 - Message dừng được giao sau MaxDeliver: với `maxDeliver = 3`, handler thấy đúng 3 lần giao, sau đó server ngừng giao và phát advisory `MAX_DELIVERIES`.
-- Ngoài đề bài (thêm vào): `maxDeliver` lớn hơn số lần thử thì không dừng sớm, fetch trên stream rỗng trả về rỗng trong thời gian có hạn, và `ackWaitMs` hoặc `maxDeliver` không hợp lệ bị từ chối rõ ràng.
+- Test bổ sung: `maxDeliver` lớn hơn số lần thử thì không dừng sớm, fetch trên stream rỗng trả về rỗng trong thời gian có hạn, và `ackWaitMs` hoặc `maxDeliver` không hợp lệ bị từ chối rõ ràng.
 
 Lab cần NATS chạy bằng `make up` (nats-server 2.15.0 với `-js`).
 Lab đọc `NATS_URL` (mặc định `nats://127.0.0.1:4222`).

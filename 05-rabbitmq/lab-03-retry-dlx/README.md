@@ -80,7 +80,7 @@ attemptsOf(headers, workQueue): number; // tổng count của x-death có queue 
 
 Go (`go/lab.go`, amqp091-go v1.15.0): `SetupRetryTopology(ch, name, Options{MaxRetries, RetryDelay})` trả `Queues{Work, Retry, Dlq, MaxRetries}`, `PublishWork(ctx, ch, queues, body)`, `StartWorker(ch, queues, handler func([]byte) error, consumerTag)` trả kênh `done`, và `Attempts(headers, workQueue)`.
 
-Interface trong task chỉ nêu `{ work, retry, dlq }` là tên queue, lab thêm trường `maxRetries` vào kết quả trả về để `startWorker(ch, queues, handler)` giữ đúng ba tham số mà vẫn biết khi nào bỏ cuộc.
+Dạng gọn nhất chỉ trả `{ work, retry, dlq }` là tên queue, lab thêm trường `maxRetries` vào kết quả trả về để `startWorker(ch, queues, handler)` giữ đúng ba tham số mà vẫn biết khi nào bỏ cuộc.
 Mỗi queue có một direct exchange cùng tên (`<name>.work`, `<name>.retry`, `<name>.dlq`) nên `queues.work` vừa là tên queue vừa là tên exchange để publish.
 
 ## Các điểm quan trọng

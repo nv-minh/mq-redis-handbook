@@ -65,7 +65,7 @@ countSocketWrites(redis: Redis): Promise<{ writes(): number; reset(): void }>;
 Go (`go/lab.go`): `DecrIfPositive(ctx, rdb, key) (bool, error)`, `SetSequential`, `SetPipelined` và `NewCountingClient(opts) (*redis.Client, *WriteCounter)`.
 Hai hàm `DecrIfPositiveNaive` (Go) và `decrIfPositiveNaive` (TS) là bản sai để demo, test không dùng chúng.
 
-Interface gốc của task viết `decrIfPositive(key)`.
+Dạng gọn nhất của hàm là `decrIfPositive(key)`.
 Lab thêm tham số `redis` ở đầu để hàm dùng chung một connection với test, giống chữ ký Go và lab 03.
 
 Lua script (cùng nội dung ở cả hai ngôn ngữ):

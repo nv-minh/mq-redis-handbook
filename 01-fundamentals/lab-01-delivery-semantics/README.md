@@ -68,7 +68,7 @@ Mô hình consumer crash: handler ném lỗi (TS) hoặc trả `error` (Go) tron
 Ở at-most-once, broker đã quên message nên công việc mất vĩnh viễn.
 Ở at-least-once, broker không nhận được ack nên giao lại.
 
-`maxDeliveries` là thứ phải thêm vào so với interface gốc, vì với `lossRate = 1` thì redelivery sẽ không bao giờ dừng.
+`maxDeliveries` là thứ phải thêm vào so với giao diện tối thiểu, vì với `lossRate = 1` thì redelivery sẽ không bao giờ dừng.
 Sau số lần giao này message được đưa vào `deadLetters()`, tương ứng trạng thái `dead` trong theory.
 
 Thứ tự: message giao lại được xếp sau các message đang chờ, nên thứ tự nhận không bảo toàn thứ tự gửi.

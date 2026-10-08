@@ -55,7 +55,7 @@ subscribe(connection: Redis, channel: string): Promise<Subscription>;
 
 Go (`go/lab.go`): `Publish(ctx, rdb, channel, message) (int64, error)`, `NumSubscribers(ctx, rdb, channel) (int64, error)` và `Subscribe(ctx, rdb, channel) (*Subscription, error)` với `Messages()` và `Close()`.
 
-Task gốc không quy định interface cho lab này, nên giao diện trên là thiết kế của lab.
+Lab này không có giao diện định sẵn, nên giao diện trên là thiết kế của lab.
 
 ## Connection riêng cho subscriber
 

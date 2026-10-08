@@ -64,8 +64,8 @@ pendingEntries(group: string): Promise<PendingEntry[]>; // XPENDING dạng exten
 Go (`go/lab.go`): `NewStreamQueue(Config{Commands, Blocking, Stream, BlockTime})` với `Publish`, `CreateGroup`, `Consume`, `Ack`, `ClaimStale`, `PendingCount` và `PendingEntries`, đều nhận `ctx` đầu tiên.
 `ClaimStale` trả `ClaimResult{Messages, DeletedIDs}`.
 
-Task gốc quy định `publish`, `consume`, `ack` và `claimStale`.
-Lab thêm `createGroup` (task yêu cầu tạo group bằng `XGROUP CREATE ... MKSTREAM`), `pendingCount` và `pendingEntries` để test đọc PEL của server làm bằng chứng.
+Giao diện chính của lab là `publish`, `consume`, `ack` và `claimStale`.
+Lab thêm `createGroup` (tạo group bằng `XGROUP CREATE ... MKSTREAM`), `pendingCount` và `pendingEntries` để test đọc PEL của server làm bằng chứng.
 Kiểu trả về của `claimStale` là thiết kế của lab: `{ messages, deletedIds }`, rỗng khi không có gì để claim.
 
 ## Các điểm quan trọng

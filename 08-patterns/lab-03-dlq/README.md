@@ -90,8 +90,8 @@ pendingEntries(): Promise<PendingEntry[]>; // XPENDING dạng extended
 Go (`go/lab.go`): `NewQueue(Config{Commands, Blocking, Stream, Group, DLQStream, Consumer, MinIdle, BlockTime})` với `EnsureGroup`, `Publish`, `ConsumeWithDLQ(ctx, Options{MaxAttempts}, handler)`, `ReplayDLQ(ctx, limit)`, `DLQEntries` và `PendingEntries`.
 Handler nhận `Delivery{ID, Fields, DeliveryCount}`, trả lỗi (hoặc ném lỗi ở TypeScript) nghĩa là lần xử lý thất bại.
 
-Task gốc quy định `consumeWithDlq({ maxAttempts }, handler)` và `replayDlq(limit)`.
-Stream, group, DLQ và consumer nằm trong constructor của `DlqQueue`, nên hai hàm giữ đúng chữ ký của task.
+Giao diện chính của lab là `consumeWithDlq({ maxAttempts }, handler)` và `replayDlq(limit)`.
+Stream, group, DLQ và consumer nằm trong constructor của `DlqQueue`, nên hai hàm giữ chữ ký gọn như trên.
 `consumeWithDlq` chạy tới khi hết việc (stream không còn entry mới và PEL của group rỗng) rồi trả `{ succeeded, failed, deadLettered }`.
 Với stream rỗng nó trả ngay kết quả toàn 0 sau một lần block, không lỗi.
 Một consumer thật chạy lâu có thể gọi hàm này trong vòng lặp, hoặc truyền `signal` (TypeScript) hay `ctx` (Go) để dừng.

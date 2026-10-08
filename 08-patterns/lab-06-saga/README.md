@@ -75,9 +75,9 @@ Go còn cho `errors.Is` và `errors.As` tìm thấy lỗi gốc lẫn từng l�
 Vì sao không resolve `compensated` kèm một object kết quả:
 
 - `compensated` là một lời khẳng định "đã hoàn tác hết".
-  Nó chỉ nên được trả khi đúng, nếu không caller đọc kiểu trả về như brief (`'completed' | 'compensated'`) sẽ tin sai.
+  Nó chỉ nên được trả khi đúng, nếu không caller đọc kiểu trả về đã công bố (`'completed' | 'compensated'`) sẽ tin sai.
 - Lỗi bị reject buộc caller phải xử lý (alert, ghi vào hàng đợi retry), còn một field phụ rất dễ bị bỏ qua.
-- Kiểu trả về `'completed' | 'compensated'` của brief giữ nguyên cho mọi trường hợp sạch sẽ.
+- Kiểu trả về `'completed' | 'compensated'` đã công bố của lab giữ nguyên cho mọi trường hợp sạch sẽ.
 
 Trường hợp compensated sạch sẽ không trả nguyên nhân của bước lỗi (kiểu trả về chỉ là một chuỗi).
 Nếu cần, bước tự ghi log nguyên nhân trước khi ném lỗi, như demo làm, hoặc mở rộng hàm để nhận một callback quan sát (bài tập 4).

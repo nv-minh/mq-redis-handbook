@@ -62,7 +62,7 @@ processingKey(consumerId: string): string;
 Go (`go/lab.go`): `NewReliableQueue(Config{Commands, Blocking, Queue, BlockTimeout})` với `Enqueue(ctx, msg) error`, `Dequeue(ctx, consumerID) (msg string, ok bool, err error)`, `Ack(ctx, consumerID, msg) (bool, error)`, `RecoverStale(ctx, consumerID) (int64, error)` và `ProcessingKey(consumerID)`.
 Go dùng `ok == false` thay cho `null` ở `Dequeue`.
 
-Task gốc quy định `enqueue`, `dequeue`, `ack` và `recoverStale`.
+Giao diện chính của lab là `enqueue`, `dequeue`, `ack` và `recoverStale`.
 Lab thêm hai phần: `ack` trả `boolean` (số bản ghi `LREM` gỡ được bằng 1) và `processingKey` để test đọc processing list bằng `LRANGE`.
 
 Quy ước key: queue là `<queue>`, processing list của consumer là `<queue>:processing:<consumerId>`.

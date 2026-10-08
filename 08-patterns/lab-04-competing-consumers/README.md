@@ -70,8 +70,8 @@ Go (`go/lab.go`): `NewWorkerGroup(Config{Commands, Options, Stream, Group, MinId
 `Handle` có `ConsumerNames()` và `Stop() error`.
 Handler nhận `Delivery{ID, Fields, Consumer, DeliveryCount}`.
 
-Task gốc quy định `startWorkers(n, handler)` trả về handle có `stop()`.
-Stream, group và `minIdle` nằm trong constructor của `WorkerGroup`, nên hàm giữ đúng chữ ký của task.
+Giao diện chính của lab là `startWorkers(n, handler)` trả về handle có `stop()`.
+Stream, group và `minIdle` nằm trong constructor của `WorkerGroup`, nên hàm giữ chữ ký gọn như trên.
 `stop()` là idempotent, chờ tối đa `blockMs` cộng thời gian handler còn lại, và reject nếu một worker đã chết vì lỗi Redis (sau khi đã đóng mọi connection).
 
 ## Các điểm quan trọng

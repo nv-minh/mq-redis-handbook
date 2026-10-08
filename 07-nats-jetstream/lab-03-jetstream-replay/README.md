@@ -7,7 +7,7 @@ Dùng deliver policy của consumer để đọc lại lịch sử của một s
 - `DeliverAll` replay toàn bộ lịch sử: publish N message, một consumer MỚI với `DeliverAll` nhận đủ N theo đúng thứ tự, và một consumer mới thứ hai cũng nhận đủ N, vì đọc không xóa message.
 - `DeliverByStartTime` bỏ qua message cũ hơn mốc: publish batch A rồi batch B, consumer mới với mốc nằm giữa hai batch chỉ nhận batch B.
   Mốc được tính từ timestamp mà server gán cho message, không từ đồng hồ của client, nên test không phụ thuộc việc đồng hồ của VM Docker lệch với máy chạy test.
-- Ngoài đề bài (đo thêm): hành vi khi không message nào có timestamp lớn hơn hoặc bằng mốc, điều mà tài liệu nghiên cứu ghi là chưa xác minh.
+- Test bổ sung (đo thêm): hành vi khi không message nào có timestamp lớn hơn hoặc bằng mốc, điều mà tài liệu nghiên cứu ghi là chưa xác minh.
 
 Lab cần NATS chạy bằng `make up` (nats-server 2.15.0 với `-js`).
 Lab đọc `NATS_URL` (mặc định `nats://127.0.0.1:4222`).

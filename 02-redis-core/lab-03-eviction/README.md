@@ -70,7 +70,7 @@ readConfig(rdb) / writeConfig(rdb, config); seedKeys; evictedKeys; deleteByPrefi
 
 Go (`go/lab.go`): `FillUntilEviction(ctx, rdb, prefix, maxKeys, FillOptions{TouchKey, MinEvicted}) (int64, error)`, `FillUntilRejected`, `LimitMemory`, `ReadConfig`, `WriteConfig`, `SeedKeys`, `EvictedKeys`, `DeleteByPrefix`.
 
-`touchKey` / `TouchKey` là thứ phải thêm vào so với interface gốc `fillUntilEviction(rdb, prefix, maxKeys)`: nó giữ cho hot key luôn "vừa được dùng" trong lúc ghi.
+`touchKey` / `TouchKey` là thứ phải thêm vào so với giao diện tối thiểu `fillUntilEviction(rdb, prefix, maxKeys)`: nó giữ cho hot key luôn "vừa được dùng" trong lúc ghi.
 
 `maxmemory` được chọn tương đối: `used_memory` hiện tại cộng 256 KiB, nên lab chạy đúng với mọi baseline.
 `maxmemory-samples` được đặt tạm là 10 để LRU xấp xỉ gần LRU thật hơn.

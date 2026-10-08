@@ -13,8 +13,9 @@ GOLANGCI_LINT := $(or $(shell command -v golangci-lint),go run github.com/golang
 
 TOPICS := $(wildcard [0-9][0-9]-*/)
 
-# Chapter 04 labs that need the sentinel and cluster profiles. They hold every chaos test
-# (describe("chaos") in TypeScript, TestChaos* in Go), which stops and restarts Redis containers.
+# Chapter 04 labs that need the sentinel and cluster profiles. They hold every test that stops and restarts
+# containers (describe("chaos") in TypeScript, TestChaos* in Go). The chapter 08 and 09 chaos tests only SIGKILL
+# a child process, need the base services only and run in `make test-fast`.
 # `make test-fast` skips these labs, `make test-chaos` runs only these labs.
 TOPOLOGY_LABS := 04-redis-advanced/lab-01-sentinel 04-redis-advanced/lab-02-cluster
 

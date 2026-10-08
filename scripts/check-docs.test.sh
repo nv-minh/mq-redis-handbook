@@ -91,6 +91,29 @@ expect "lab README without mermaid exits 1" 1 "lab-01-demo/README.md" -- "$TMP/e
 # (f) no arguments is not an error
 expect "no topics exits 0" 0 "" --
 
+# (g) use case README without a mermaid block fails and names the file
+make_topic "$TMP/g/06-nousecasediagram"
+mkdir -p "$TMP/g/06-nousecasediagram/usecase-01-demo"
+printf '# Use case without diagram\n' >"$TMP/g/06-nousecasediagram/usecase-01-demo/README.md"
+expect "usecase README without mermaid exits 1 and names file" 1 "usecase-01-demo/README.md" -- "$TMP/g/06-nousecasediagram"
+
+# (h) use case README with a mermaid block passes
+make_topic "$TMP/h/07-usecaseok"
+mkdir -p "$TMP/h/07-usecaseok/usecase-01-demo"
+cat >"$TMP/h/07-usecaseok/usecase-01-demo/README.md" <<'MD'
+# Use case
+
+```mermaid
+flowchart LR
+  X --> Y
+```
+MD
+expect "usecase README with mermaid exits 0" 0 "" -- "$TMP/h/07-usecaseok"
+
+# (i) a topic with no usecase directories is unaffected (case (a) already covers it, assert explicitly)
+make_topic "$TMP/i/08-nousecase"
+expect "topic without usecase directories exits 0" 0 "" -- "$TMP/i/08-nousecase"
+
 if [ "$failures" -ne 0 ]; then
   echo "$failures test(s) failed"
   exit 1

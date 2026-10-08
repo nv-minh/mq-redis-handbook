@@ -30,7 +30,7 @@ help:
 	@echo "make test-fast                       all tests except the sentinel and cluster labs (needs plain 'make up')"
 	@echo "make test-chaos                      only the sentinel and cluster labs, chaos tests included (needs PROFILE=\"sentinel cluster\")"
 	@echo "make lint                            eslint, prettier, tsc, golangci-lint, no-sleep gate, compose check"
-	@echo "make docs-check                      validate theory.md and lab READMEs"
+	@echo "make docs-check                      validate theory.md, lab and use case READMEs"
 	@echo "make mermaid-check [FILES=...]       check that every mermaid block parses (mmdc, needs Chromium from pnpm install)"
 
 up:

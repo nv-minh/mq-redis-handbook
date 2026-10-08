@@ -308,20 +308,37 @@ export async function createRealtimeServer(options: RealtimeOptions): Promise<Re
     if (closing) return rejectUpgrade(socket, 503, "server đang tắt");
 
     const room = acquireRoom(roomName);
+    // Chỗ giữ trong phòng phải được trả lại trên MỌI đường không dẫn tới join(): subscribe lỗi, server đang tắt,
+    // client bỏ đi trong lúc chờ, và cả khi ws.handleUpgrade từ chối handshake mà không gọi callback.
+    let joined = false;
     try {
       // Chỉ nhận kết nối sau khi instance đã subscribe xong: client open nghĩa là mọi message về sau tới được.
-      await room.ready;
+      // Đua với sự kiện 'close' của socket để client bỏ đi giữa chừng không giữ chỗ trong lúc chờ.
+      let onClose = () => undefined as void;
+      const clientGone = new Promise<"gone">((resolve) => {
+        onClose = () => resolve("gone");
+        socket.once("close", onClose);
+      });
+      let outcome: "ready" | "gone";
+      try {
+        outcome = await Promise.race([room.ready.then(() => "ready" as const), clientGone]);
+      } finally {
+        socket.off("close", onClose);
+      }
+      if (outcome === "gone" || socket.destroyed) return;
+      if (closing) return rejectUpgrade(socket, 503, "server đang tắt");
+      // ws trả về mà KHÔNG gọi callback khi từ chối handshake (thiếu Sec-WebSocket-Key, version sai, Upgrade sai,
+      // socket đã nửa đóng, ...). Callback chạy đồng bộ vì lab không dùng verifyClient hay extension.
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        joined = true;
+        join(room, ws, name);
+      });
     } catch (error) {
-      releaseRoom(room);
       onError(error as Error);
-      return rejectUpgrade(socket, 503, "không subscribe được channel của phòng");
+      if (!socket.destroyed) rejectUpgrade(socket, 503, "không subscribe được channel của phòng");
+    } finally {
+      if (!joined) releaseRoom(room);
     }
-    if (closing || socket.destroyed) {
-      releaseRoom(room);
-      if (!socket.destroyed) rejectUpgrade(socket, 503, "server đang tắt");
-      return;
-    }
-    wss.handleUpgrade(request, socket, head, (ws) => join(room, ws, name));
   }
 
   async function handleHttp(

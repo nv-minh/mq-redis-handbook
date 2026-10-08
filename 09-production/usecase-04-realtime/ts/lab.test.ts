@@ -198,7 +198,10 @@ afterEach(async () => {
     async () => {
       for (const prefix of ownPrefixes) {
         expect(await scanKeys(prefix), `key còn sót của prefix ${prefix}`).toEqual([]);
-        expect(await leftoverChannels(prefix), `channel còn sót của prefix ${prefix}`).toEqual([]);
+        // Redis dọn subscription của connection đã đóng bất đồng bộ (khi đọc tới EOF), nên chờ có giới hạn.
+        await waitUntil(`không còn channel của prefix ${prefix}`, async () => {
+          return (await leftoverChannels(prefix)).length === 0 || undefined;
+        });
       }
     },
   ]);
@@ -326,7 +329,7 @@ describe("usecase-04 realtime: fan-out WebSocket qua Redis Pub/Sub", () => {
     }
 
     // POST là "đặt score" (ZADD), không phải cộng dồn: cập nhật alice từ 10 lên 40 đưa nó lên đầu,
-    // và POST lần nữa với 15 đặt lại đúng 15 (nếu là ZINCRBY thì sẽ ra 55).
+    // và POST lần nữa với 15 đặt lại đúng 15 (nếu là ZINCRBY thì sẽ ra 10 + 40 + 15 = 65).
     expect((await post(instanceB, "season1", { member: "alice", score: 40 })).status).toBe(200);
     expect(((await top(instanceA, "season1", "?n=2")).body.entries as Entry[])[0]).toEqual({
       member: "alice",
@@ -468,6 +471,53 @@ describe("usecase-04 realtime: các cạnh của server", () => {
     await waitUntil("server không còn phòng nào", () => server.roomCount() === 0 || undefined);
   });
 
+  it("rejected_or_abandoned_handshake_does_not_leak_a_room_subscription", async () => {
+    const prefix = newPrefix("leak");
+    const server = await startServer(prefix);
+    const room = "leak-room";
+    const channel = roomChannel(prefix, room);
+    const valid = [
+      "Upgrade: websocket",
+      "Connection: Upgrade",
+      `Sec-WebSocket-Key: ${randomBytes(16).toString("base64")}`,
+      "Sec-WebSocket-Version: 13",
+    ];
+    const withoutKey = valid.filter((header) => !header.startsWith("Sec-WebSocket-Key"));
+    const cases: [string, string[]][] = [
+      ["thiếu Sec-WebSocket-Key", withoutKey],
+      [
+        "Sec-WebSocket-Version sai",
+        valid.map((h) => (h.includes("Version") ? "Sec-WebSocket-Version: 99" : h)),
+      ],
+      [
+        "Upgrade không phải websocket",
+        valid.map((h) => (h.startsWith("Upgrade") ? "Upgrade: h2c" : h)),
+      ],
+    ];
+    for (const [label, headers] of cases) {
+      // Server chỉ trả lời SAU khi đã subscribe xong (acquireRoom và room.ready), nên khi status về,
+      // phòng đã được giữ chỗ. Handshake bị từ chối thì chỗ đó phải được trả lại.
+      expect(await rawUpgrade(server, room, headers), label).toMatch(/^HTTP\/1\.1 4\d\d /);
+      await waitUntil(`${label}: instance bỏ phòng`, () => server.roomCount() === 0 || undefined);
+      await waitUntil(`${label}: NUMSUB về 0`, async () => {
+        return (await numSub(channel)) === 0 || undefined;
+      });
+    }
+
+    // Client gửi upgrade hợp lệ rồi đóng TCP ngay: tùy thời điểm server thấy request trước hay sau khi socket
+    // đóng, nhưng kết quả phải luôn như nhau: không phòng nào bị giữ lại.
+    for (let i = 0; i < 5; i++) {
+      const socket = await openRaw(server, room, valid);
+      socket.destroy();
+    }
+    await waitUntil("instance không giữ phòng nào sau khi client bỏ đi", () => {
+      return server.roomCount() === 0 || undefined;
+    });
+    await waitUntil("NUMSUB về 0 sau khi client bỏ đi", async () => {
+      return (await numSub(channel)) === 0 || undefined;
+    });
+  });
+
   it("cross_origin_upgrade_is_rejected_but_same_origin_and_no_origin_are_allowed", async () => {
     const prefix = newPrefix("origin");
     const server = await startServer(prefix);
@@ -582,7 +632,7 @@ describe("usecase-04 realtime: các cạnh của server", () => {
 
   it("unresponsive_client_is_dropped_by_heartbeat", async () => {
     const prefix = newPrefix("hb");
-    const server = await startServer(prefix, { pingIntervalMs: 50 });
+    const server = await startServer(prefix, { pingIntervalMs: 200 });
     const room = "heartbeat";
     // Client kẹt không bao giờ trả pong. Client khỏe (ws tự trả pong) thì ở lại.
     await connectStuck(server, room);
@@ -625,6 +675,44 @@ describe("usecase-04 realtime: các cạnh của server", () => {
     await expect(upgradeStatus(server.wsUrl(room))).rejects.toThrow();
   });
 });
+
+/** Mở TCP socket thô và gửi một request upgrade với đúng các header cho trước (không dùng thư viện `ws`). */
+async function openRaw(
+  server: RealtimeServer,
+  room: string,
+  headers: string[],
+): Promise<net.Socket> {
+  const target = new URL(server.wsUrl(room));
+  const socket = net.connect({ host: target.hostname, port: Number(target.port) });
+  rawSockets.push(socket);
+  socket.on("error", () => undefined);
+  await new Promise<void>((resolve, reject) => {
+    socket.once("connect", resolve);
+    socket.once("error", reject);
+  });
+  socket.write(
+    `GET ${target.pathname}${target.search} HTTP/1.1\r\nHost: ${target.host}\r\n${headers.join("\r\n")}\r\n\r\n`,
+  );
+  return socket;
+}
+
+/** Gửi request upgrade thô và trả về dòng status của phản hồi. */
+async function rawUpgrade(
+  server: RealtimeServer,
+  room: string,
+  headers: string[],
+): Promise<string> {
+  const socket = await openRaw(server, room, headers);
+  return new Promise<string>((resolve, reject) => {
+    let received = "";
+    socket.on("data", (chunk: Buffer) => {
+      received += chunk.toString("latin1");
+      const end = received.indexOf("\r\n");
+      if (end >= 0) resolve(received.slice(0, end));
+    });
+    socket.once("close", () => reject(new Error(`socket đóng trước khi có status: ${received}`)));
+  });
+}
 
 /**
  * Client kẹt: TCP socket thô làm handshake WebSocket bằng tay rồi pause, nên không bao giờ đọc dữ liệu

@@ -41,7 +41,8 @@ type Config struct {
 	// MinIdle: XAUTOCLAIM chỉ tiếp quản entry đã pending lâu hơn ngưỡng này.
 	MinIdle time.Duration
 	// BlockTime là thời gian chờ entry mới mỗi vòng. Giá trị 0 hoặc nhỏ hơn thành một giây.
-	// Client Blocking cần ReadTimeout lớn hơn BlockTime (XReadGroup có kiểu của go-redis tự cộng thêm).
+	// ReadTimeout của client Blocking không cần lớn hơn BlockTime, vì XReadGroup có kiểu của go-redis tự cộng
+	// thời gian block vào read deadline (chương 03 đã đo). Chỉ lệnh thô qua Do mới cần ReadTimeout đủ lớn.
 	BlockTime time.Duration
 }
 

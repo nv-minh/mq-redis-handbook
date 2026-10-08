@@ -25,7 +25,8 @@ type Config struct {
 	// Commands chạy các lệnh thường (XADD, XACK, XAUTOCLAIM, XPENDING, XGROUP), do caller sở hữu.
 	Commands *redis.Client
 	// Options dùng để tạo một client blocking riêng cho mỗi worker (connection đang bị chặn không phục vụ
-	// được lệnh khác). Các client này do Handle.Stop đóng. ReadTimeout (mặc định 3 giây) phải lớn hơn BlockTime.
+	// được lệnh khác). Các client này do Handle.Stop đóng. ReadTimeout (mặc định 3 giây) không cần lớn hơn BlockTime,
+	// vì XReadGroup có kiểu tự cộng thời gian block vào read deadline (chương 03 đã đo); chỉ lệnh thô qua Do mới cần.
 	Options *redis.Options
 	// Stream là stream chứa công việc, Group là consumer group mà các worker cùng đọc.
 	Stream, Group string

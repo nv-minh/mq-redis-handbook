@@ -168,9 +168,11 @@ for (const result of await Promise.allSettled(servers.map((server) => server.shu
 }
 try {
   await deleteByPrefix();
-  const leftover = await rdb.pubsub("CHANNELS", `${escapeGlob(prefix)}*`);
-  if ((leftover as string[]).length > 0)
-    errors.push(new Error(`channel còn sót: ${String(leftover)}`));
+  // Redis dọn subscription của connection đã đóng bất đồng bộ (khi đọc tới EOF), nên chờ có giới hạn.
+  await until(
+    "không còn channel nào của demo",
+    async () => ((await rdb.pubsub("CHANNELS", `${escapeGlob(prefix)}*`)) as string[]).length === 0,
+  );
 } catch (error) {
   errors.push(error);
 }

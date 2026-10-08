@@ -251,7 +251,10 @@ func disconnectDemo(ctx context.Context, rdb *redis.Client, prefix string, a *la
 		return err
 	}
 	*peers = append(*peers, dave)
-	if err := until("instance A subscribe phòng lonely", func() bool { return numSub(ctx, rdb, channel) == 1 }); err != nil {
+	// Client được đăng ký vào phòng sau khi Accept trả về, tức có thể sau khi Dial của client đã xong.
+	if err := until("instance A subscribe phòng lonely và có 1 client", func() bool {
+		return numSub(ctx, rdb, channel) == 1 && a.ClientCount("lonely") == 1
+	}); err != nil {
 		return err
 	}
 	fmt.Printf("Instance A có %d client trong phòng lonely, NUMSUB = %d.\n", a.ClientCount("lonely"), numSub(ctx, rdb, channel))
@@ -321,8 +324,12 @@ func run() error {
 	if err := deleteByPrefix(shutdownCtx, rdb, prefix); err != nil {
 		errs = append(errs, err)
 	}
-	if channels, err := rdb.PubSubChannels(shutdownCtx, escapeGlob(prefix)+"*").Result(); err != nil || len(channels) > 0 {
-		errs = append(errs, fmt.Errorf("channel còn sót: %v (lỗi %v)", channels, err))
+	// Redis dọn subscription của connection đã đóng bất đồng bộ (khi đọc tới EOF), nên chờ có giới hạn.
+	if err := until("không còn channel nào của demo", func() bool {
+		channels, err := rdb.PubSubChannels(shutdownCtx, escapeGlob(prefix)+"*").Result()
+		return err == nil && len(channels) == 0
+	}); err != nil {
+		errs = append(errs, err)
 	}
 	if err := rdb.Close(); err != nil {
 		errs = append(errs, err)

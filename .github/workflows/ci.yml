@@ -20,12 +20,21 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    env:
-      # Secrets are not allowed in step `if`, so expose them as env first. Both stay empty on forks and when unset.
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v7
+      # Only a boolean leaves this step: the expressions below compare the secrets to '' and never print their values.
+      # On forks and when the secrets are unset both are empty, so `enabled` is false.
+      - name: Detect optional Docker Hub secrets
+        id: dockerhub
+        env:
+          HAS_USERNAME: ${{ secrets.DOCKERHUB_USERNAME != '' }}
+          HAS_TOKEN: ${{ secrets.DOCKERHUB_TOKEN != '' }}
+        run: |
+          if [ "$HAS_USERNAME" = "true" ] && [ "$HAS_TOKEN" = "true" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
       - uses: pnpm/action-setup@v6
         with:
           version: ${{ env.PNPM_VERSION }}
@@ -39,12 +48,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # Optional: raises the Docker Hub pull limit for `docker manifest inspect`. The workflow passes without the secrets
       # (check-compose reports a rate limit as a failure because CHECK_COMPOSE_STRICT=1, so add them if it happens).
+      # Secrets are not allowed in step `if`, so the "Detect" step at the top only exposes a boolean output. No secret value sits in
+      # job-level env, and the login runs after `pnpm install`, so install lifecycle scripts never see the secrets.
       - name: Docker Hub login (optional)
-        if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
+        if: ${{ steps.dockerhub.outputs.enabled == 'true' }}
         uses: docker/login-action@v4
         with:
-          username: ${{ env.DOCKERHUB_USERNAME }}
-          password: ${{ env.DOCKERHUB_TOKEN }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       # Chromium on ubuntu runners cannot start its sandbox, so mmdc gets a puppeteer config with --no-sandbox.
       - name: Puppeteer config for mmdc
         run: |

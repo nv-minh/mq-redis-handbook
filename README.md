@@ -203,7 +203,8 @@ Chúng dừng và khởi động lại container Redis nên tách thành job ri�
 Hai lab này cần cả hai profile, vì vậy `make test-fast` bỏ qua cả hai lab chứ không chỉ riêng test chaos.
 
 Trên CI, `check-compose` chạy với `CHECK_COMPOSE_STRICT=1`: gặp rate limit của Docker Hub là lỗi.
-Nếu cần, thêm secret `DOCKERHUB_USERNAME` và `DOCKERHUB_TOKEN` của repo, job `lint` sẽ tự `docker login` (bước này bị bỏ qua khi thiếu secret).
+Nếu cần, thêm secret `DOCKERHUB_USERNAME` và `DOCKERHUB_TOKEN` của repo, job `lint` sẽ tự `docker login` (bước này bị bỏ qua khi thiếu secret hoặc trên pull request từ fork).
+Workflow không đặt giá trị secret vào env cấp job: một bước nhỏ ở đầu job chỉ xuất ra một giá trị boolean, và bước login nhận secret trực tiếp rồi chạy SAU `pnpm install`, nên script cài đặt của dependency không bao giờ thấy secret.
 `mmdc` trên runner ubuntu cần Chromium chạy với `--no-sandbox`: workflow tạo file cấu hình puppeteer và trỏ biến `MERMAID_PUPPETEER_CONFIG` tới nó.
 Local không cần biến này, dùng Chromium do `pnpm install` tải.
 

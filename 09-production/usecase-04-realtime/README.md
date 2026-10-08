@@ -387,6 +387,7 @@ Không có sleep cố định: sự sẵn sàng chờ bằng `PUBSUB NUMSUB` qua
 | `leaderboard_top_returns_scores_in_descending_order`                         | `TestLeaderboardTopReturnsScoresInDescendingOrder`                   |
 | `disconnected_client_is_removed_from_room`                                   | `TestDisconnectedClientIsRemovedFromRoom`                            |
 | `invalid_room_is_rejected_with_400_before_the_upgrade`                       | `TestInvalidRoomIsRejectedWith400BeforeTheUpgrade`                   |
+| `rejected_or_abandoned_handshake_does_not_leak_a_room_subscription`          | `TestRejectedOrAbandonedHandshakeDoesNotLeakARoomSubscription`       |
 | `cross_origin_upgrade_is_rejected_but_same_origin_and_no_origin_are_allowed` | `TestCrossOriginUpgradeIsRejectedButSameOriginAndNoOriginAreAllowed` |
 | `malformed_message_closes_only_that_connection_with_1003`                    | `TestMalformedMessageClosesOnlyThatConnectionWith1003`               |
 | `oversized_message_closes_connection_with_1009_and_instance_survives`        | `TestOversizedMessageClosesConnectionWith1009AndInstanceSurvives`    |
@@ -400,6 +401,9 @@ Mấy điểm đáng đọc trong code test:
 - Test fan-out đặt client của phòng khác trên CÙNG instance với người gửi, tức dùng chung subscriber connection.
   Message của phòng khác được gửi SAU, và khi client đó nhận được nó thì message trước (nếu bị giao nhầm) đã phải nằm trong hộp thư rồi, vì hai channel đi trên cùng một connection theo thứ tự.
   Cuối test, một marker chứng minh không có bản sao thừa: người nhận thấy đúng `[message, marker]`.
+- Test `rejected_or_abandoned_handshake...` gửi request upgrade thô (thiếu `Sec-WebSocket-Key`, version sai, `Upgrade` sai) và request hợp lệ rồi đóng TCP ngay.
+  Test khẳng định `roomCount()` và `PUBSUB NUMSUB` về 0: lỗi này từng làm TS giữ subscription mãi mãi vì `ws` từ chối handshake mà không gọi callback.
+- Mọi lần đọc `NUMSUB` hoặc `PUBSUB CHANNELS` sau một thay đổi (rời phòng, shutdown, dọn dẹp) đều nằm sau một chờ có giới hạn, vì Redis cập nhật bất đồng bộ.
 - Test dọn dẹp chạy bốn pha tuần tự và gom lỗi: đóng client, shutdown instance, xóa key bằng `SCAN`, rồi kiểm tra không còn key hay subscription (`PUBSUB CHANNELS` theo prefix, đã escape glob) của test.
 - Go: goroutine trong test chỉ dùng `t.Errorf`, chạy với `-race`, và `Shutdown` trả nil chứng minh mọi goroutine của instance đã thoát.
 
@@ -408,14 +412,14 @@ Mấy điểm đáng đọc trong code test:
 Đo một lần trên một máy (loopback, Redis 8.10.2, Node 22, Go 1.26), không phải benchmark.
 Các con số chỉ để cảm nhận bậc độ lớn, không dùng làm cam kết.
 
-| Đại lượng                                            | TypeScript (`ws`)   | Go (`coder/websocket`) |
-| ---------------------------------------------------- | ------------------- | ---------------------- |
-| Client đầu tiên của phòng mở kết nối (gồm subscribe) | khoảng 5 ms         | khoảng 3 ms            |
-| Client thứ hai của phòng (không subscribe lại)       | khoảng 1 ms         | dưới 1 ms              |
-| Đóng đột ngột tới khi instance bỏ client khỏi phòng  | khoảng 2 ms         | khoảng 1 ms            |
-| Đóng đột ngột tới khi `NUMSUB` về 0 (client cuối)    | khoảng 6 ms         | khoảng 8 ms            |
-| Client chậm bị hủy sau (message 30000 byte)          | 45 message (1,4 MB) | 48 message (1,4 MB)    |
-| Heartbeat ping 50 ms hủy client không trả pong sau   | khoảng 100 ms       | khoảng 100 ms          |
+| Đại lượng                                                                         | TypeScript (`ws`)   | Go (`coder/websocket`) |
+| --------------------------------------------------------------------------------- | ------------------- | ---------------------- |
+| Client đầu tiên của phòng mở kết nối (gồm subscribe)                              | khoảng 5 ms         | khoảng 3 ms            |
+| Client thứ hai của phòng (không subscribe lại)                                    | khoảng 1 ms         | dưới 1 ms              |
+| Đóng đột ngột tới khi instance bỏ client khỏi phòng                               | khoảng 2 ms         | khoảng 1 ms            |
+| Đóng đột ngột tới khi `NUMSUB` về 0 (client cuối)                                 | khoảng 6 ms         | khoảng 8 ms            |
+| Client chậm bị hủy sau (message 30000 byte)                                       | 45 message (1,4 MB) | 48 message (1,4 MB)    |
+| Heartbeat ping 50 ms (đo một lần, test dùng 200 ms) hủy client không trả pong sau | khoảng 100 ms       | khoảng 100 ms          |
 
 Một vài chi tiết:
 
@@ -460,9 +464,13 @@ Cột broker chuyên dụng là tóm tắt, chi tiết nằm ở các chương 0
 - Không có rate limit cho message: một client có thể bắn đầy phòng.
   Use case 3 có sliding window limiter dùng được cho việc này.
 - Mở rộng subscriber: mỗi instance dùng một subscriber connection và số subscription bằng số phòng đang có người.
-  Số channel lớn (hàng chục nghìn phòng) làm Redis tốn bộ nhớ cho bảng subscription, và mỗi `PUBLISH` tốn thời gian tỷ lệ với số subscriber của channel đó.
+  Số channel lớn (hàng chục nghìn phòng) làm Redis tốn bộ nhớ cho bảng subscription, và mỗi `PUBLISH` tốn thời gian tỷ lệ với số subscriber của channel đó (chưa xác minh: kiến thức tác giả, không nằm trong research của handbook, và lab không đo).
   Trong Redis Cluster, Pub/Sub thường gửi message tới mọi node qua cluster bus; sharded Pub/Sub (`SSUBSCRIBE`, `SPUBLISH`, Redis 7.0+) giữ message trong shard (chưa kiểm thử trong lab này).
-- Đứt subscriber connection: ioredis (`autoResubscribe`) và go-redis đều nối lại và subscribe lại, nhưng message trong lúc đứt là mất, và lab này chưa có test cho tình huống đó (xem bài tập 1).
+- Đứt subscriber connection: ioredis tự `autoResubscribe` sau khi nối lại (theo README của ioredis trong research của handbook), và go-redis nối lại rồi subscribe lại các channel đã đăng ký (tác giả đọc `pubsub.go` của v9.23.0, chưa xác minh bằng test).
+  Message trong lúc đứt là mất, và lab này chưa có test cho tình huống đó (xem bài tập 1).
+- Upgrade chờ xác nhận subscribe mà KHÔNG có timeout riêng: khi subscriber connection đang đứt, các upgrade mới treo cho tới khi client tự bỏ cuộc hoặc Redis nối lại.
+  Lab cố ý giữ như vậy để mã ngắn, và chỉ ghi lại giới hạn này.
+  Khi client bỏ đi trong lúc chờ, chỗ giữ trong phòng được trả lại ngay (TS đua với sự kiện `close` của socket, Go dùng context của request).
 - Tên channel không gắn với database number của Redis: publish ở db 10 thì subscriber ở db 1 vẫn nhận được, nên prefix channel theo môi trường (lab dùng `prefix`).
 - `PUBSUB NUMSUB` đếm subscriber connection, không đếm client WebSocket: hai instance cùng subscribe một channel cho `NUMSUB = 2` dù có hàng nghìn client.
 - Lab chạy trên một Redis duy nhất, không Sentinel hay Cluster, và các instance cùng process nên không thấy được lỗi mạng giữa instance và Redis.
@@ -493,6 +501,7 @@ Nguồn: https://redis.io/docs/latest/develop/data-types/sorted-sets/
 Nguồn: https://redis.io/docs/latest/commands/zrevrange/
 Nguồn: https://redis.io/docs/latest/develop/data-types/streams/
 Nguồn: https://github.com/websockets/ws/blob/master/README.md
+Nguồn: https://github.com/redis/ioredis/blob/main/README.md
 Nguồn: https://github.com/coder/websocket/blob/v1.8.15/README.md
 Nguồn: https://github.com/coder/websocket/blob/v1.8.15/read.go
 Nguồn: https://github.com/coder/websocket/blob/v1.8.15/accept.go

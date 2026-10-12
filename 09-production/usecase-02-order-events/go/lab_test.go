@@ -858,7 +858,20 @@ func TestParseEventTreatsOrderPlacedWithoutValidAmountAsPoison(t *testing.T) {
 	if _, ok := ParseEvent(wrap(`{"sku":"sku-1","quantity":1,"amount":5}`)); !ok {
 		t.Fatal("event hợp lệ bị coi là poison")
 	}
+	// JSON không phân biệt 2 và 2.0: bản TypeScript nhận cả hai (Number.isInteger), bản Go cũng phải nhận.
+	for _, good := range []string{`{"sku":"sku-1","quantity":2.0,"amount":5}`, `{"sku":"sku-1","quantity":2e0,"amount":5}`} {
+		e, ok := ParseEvent(wrap(good))
+		if !ok {
+			t.Errorf("data %s đáng lẽ hợp lệ", good)
+			continue
+		}
+		if data, _ := e.placed(); data.Quantity != 2 {
+			t.Errorf("data %s: quantity = %d, mong đợi 2", good, data.Quantity)
+		}
+	}
 	for _, bad := range []string{
+		`{"sku":"sku-1","quantity":1.5,"amount":5}`,
+		`{"sku":"sku-1","quantity":2147483648,"amount":5}`,
 		`{"sku":"sku-1","quantity":1}`,
 		`{"sku":"sku-1","quantity":1,"amount":null}`,
 		`{"sku":"sku-1","quantity":1,"amount":"5"}`,

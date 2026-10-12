@@ -467,7 +467,9 @@ Cột broker chuyên dụng là tóm tắt, chi tiết nằm ở các chương 0
   Số channel lớn (hàng chục nghìn phòng) làm Redis tốn bộ nhớ cho bảng subscription, và mỗi `PUBLISH` tốn thời gian tỷ lệ với số subscriber của channel đó (chưa xác minh: kiến thức tác giả, không nằm trong research của handbook, và lab không đo).
   Trong Redis Cluster, Pub/Sub thường gửi message tới mọi node qua cluster bus; sharded Pub/Sub (`SSUBSCRIBE`, `SPUBLISH`, Redis 7.0+) giữ message trong shard (chưa kiểm thử trong lab này).
 - Đứt subscriber connection: ioredis tự `autoResubscribe` sau khi nối lại (theo README của ioredis trong research của handbook), và go-redis nối lại rồi subscribe lại các channel đã đăng ký (tác giả đọc `pubsub.go` của v9.23.0, chưa xác minh bằng test).
-  Message trong lúc đứt là mất, và lab này chưa có test cho tình huống đó (xem bài tập 1).
+  Message trong lúc đứt là mất.
+  Phía TypeScript có test cho một phần tình huống này: phòng bị bỏ trong lúc subscriber đang nối lại phải không bị subscribe lại (instance vẫn gửi UNSUBSCRIBE, lệnh chạy sau lần resubscribe tự động), và `shutdown()` không treo khi connection Redis đang đứt.
+  Phía Go và việc message bị mất khi đứt chưa có test (xem bài tập 1).
 - Upgrade chờ xác nhận subscribe mà KHÔNG có timeout riêng: khi subscriber connection đang đứt, các upgrade mới treo cho tới khi client tự bỏ cuộc hoặc Redis nối lại.
   Lab cố ý giữ như vậy để mã ngắn, và chỉ ghi lại giới hạn này.
   Khi client bỏ đi trong lúc chờ, chỗ giữ trong phòng được trả lại ngay (TS đua với sự kiện `close` của socket, Go dùng context của request).

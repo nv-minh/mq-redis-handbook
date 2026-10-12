@@ -642,7 +642,18 @@ describe("usecase-02 order events: outbox, Kafka, idempotent consumers, saga", (
     const base = { eventId: "e1", type: "OrderPlaced", orderId: "o1" };
     const data = { sku: SKU, quantity: 1 };
     expect(parseEvent(JSON.stringify({ ...base, data: { ...data, amount: 5 } }))).toBeDefined();
-    for (const bad of [data, { ...data, amount: null }, { ...data, amount: "5" }]) {
+    // quantity vượt int32 làm insert Postgres lỗi mãi, nên là poison giống bản Go; 2.0 là số nguyên hợp lệ.
+    expect(
+      parseEvent(
+        `{"eventId":"e1","type":"OrderPlaced","orderId":"o1","data":{"sku":"${SKU}","quantity":2.0,"amount":5}}`,
+      ),
+    ).toBeDefined();
+    for (const bad of [
+      data,
+      { ...data, amount: null },
+      { ...data, amount: "5" },
+      { ...data, amount: 5, quantity: 2_147_483_648 },
+    ]) {
       expect(
         parseEvent(JSON.stringify({ ...base, data: bad })),
         JSON.stringify(bad),

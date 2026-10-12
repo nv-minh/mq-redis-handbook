@@ -157,7 +157,9 @@ export async function createRealtimeServer(options: RealtimeOptions): Promise<Re
     room.refs--;
     if (room.refs > 0 || rooms.get(room.name) !== room) return;
     rooms.delete(room.name);
-    if (subscriber.status === "ready") {
+    // Gửi UNSUBSCRIBE cả khi connection đang reconnect: lệnh nằm trong offline queue và chạy sau lần
+    // resubscribe tự động của ioredis, nên phòng đã bỏ không bị giữ lại sau khi Redis quay lại.
+    if (subscriber.status !== "end") {
       subscriber.unsubscribe(room.channel).catch((error: Error) => onError(error));
     }
   }
@@ -460,10 +462,14 @@ export async function createRealtimeServer(options: RealtimeOptions): Promise<Re
 
 /** QUIT rồi chờ socket đóng hẳn (status "end"): reply OK của QUIT về trước khi socket đóng. */
 async function closeRedis(connection: Redis): Promise<void> {
-  const ended = new Promise<void>((resolve) => {
-    if (connection.status === "end") resolve();
-    else connection.once("end", resolve);
-  });
+  // Connection đang reconnect không gửi được QUIT: lệnh nằm chờ trong offline queue và shutdown treo cho tới
+  // khi Redis quay lại. Không còn gì để flush, nên ngắt thẳng. Không chờ sự kiện "end": ioredis không phát nó
+  // khi connection đang đợi retry (chưa có socket), dù disconnect() đã hủy timer retry nên không còn reconnect.
+  if (connection.status !== "ready") {
+    connection.disconnect();
+    return;
+  }
+  const ended = new Promise<void>((resolve) => connection.once("end", resolve));
   try {
     await connection.quit();
     await ended;

@@ -173,6 +173,54 @@ async function settleAll(tasks: Promise<unknown>[]): Promise<void> {
   if (failed) throw (failed as PromiseRejectedResult).reason;
 }
 
+/**
+ * Proxy TCP tới Redis mà test có thể cắt: `block()` hủy mọi connection đang có và từ chối connection mới
+ * cho tới khi `unblock()`. Nhờ đó connection subscribe của instance kẹt ở trạng thái reconnect một cách
+ * xác định, không phụ thuộc vào việc đua với chu kỳ retry của ioredis.
+ */
+async function startRedisProxy(): Promise<{
+  url: string;
+  block(): void;
+  unblock(): void;
+  close(): Promise<void>;
+}> {
+  const target = new URL(url);
+  const sockets = new Set<net.Socket>();
+  let blocked = false;
+  const server = net.createServer((client) => {
+    if (blocked) return void client.destroy();
+    const upstream = net.connect(Number(target.port || 6379), target.hostname);
+    for (const socket of [client, upstream]) {
+      sockets.add(socket);
+      socket.on("error", () => socket.destroy());
+      socket.on("close", () => {
+        sockets.delete(socket);
+        client.destroy();
+        upstream.destroy();
+      });
+    }
+    client.pipe(upstream);
+    upstream.pipe(client);
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as net.AddressInfo;
+  return {
+    url: `redis://127.0.0.1:${port}`,
+    block() {
+      blocked = true;
+      for (const socket of sockets) socket.destroy();
+    },
+    unblock() {
+      blocked = false;
+    },
+    close: () =>
+      new Promise<void>((resolve) => {
+        for (const socket of sockets) socket.destroy();
+        server.close(() => resolve());
+      }),
+  };
+}
+
 afterEach(async () => {
   const ownClients = clients.splice(0);
   const ownSockets = rawSockets.splice(0);
@@ -517,6 +565,45 @@ describe("usecase-04 realtime: các cạnh của server", () => {
       return (await numSub(channel)) === 0 || undefined;
     });
   });
+
+  it("room_released_while_subscriber_is_reconnecting_is_not_resubscribed", async () => {
+    const proxy = await startRedisProxy();
+    const prefix = newPrefix("reconnect");
+    const server = await startServer(prefix, { redisUrl: proxy.url });
+    try {
+      const channel = roomChannel(prefix, "gone");
+      const client = await connect(server, "gone");
+      await waitUntil(
+        "instance subscribe phòng",
+        async () => (await numSub(channel)) === 1 || undefined,
+      );
+
+      // Cắt Redis: connection subscribe rớt và không reconnect được, nên instance không thể gửi UNSUBSCRIBE ngay.
+      proxy.block();
+      await waitUntil("subscriber rời trạng thái ready", () => {
+        return server.redisStatus().subscriber !== "ready" || undefined;
+      });
+      client.ws.terminate();
+      await client.closed;
+      await waitUntil("instance bỏ phòng", () => server.roomCount() === 0 || undefined);
+
+      // Redis quay lại. Phòng đã bỏ không được subscribe lại.
+      proxy.unblock();
+      await waitUntil("subscriber ready lại", () => {
+        return server.redisStatus().subscriber === "ready" || undefined;
+      });
+      // Phòng khác làm mốc: lệnh trên cùng connection được Redis xử lý theo thứ tự, nên khi mốc đã
+      // subscribe thì mọi lệnh gửi trước nó (kể cả resubscribe tự động) đã được xử lý.
+      const marker = roomChannel(prefix, "marker");
+      await connect(server, "marker");
+      await waitUntil("mốc đã subscribe", async () => (await numSub(marker)) === 1 || undefined);
+      expect(await numSub(channel), "phòng đã bỏ bị subscribe lại sau reconnect").toBe(0);
+    } finally {
+      proxy.unblock();
+      await server.shutdown();
+      await proxy.close();
+    }
+  }, 30_000);
 
   it("cross_origin_upgrade_is_rejected_but_same_origin_and_no_origin_are_allowed", async () => {
     const prefix = newPrefix("origin");

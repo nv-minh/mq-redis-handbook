@@ -68,13 +68,14 @@ func ParseEvent(value []byte) (DomainEvent, bool) {
 }
 
 // placed đọc data của OrderPlaced. ok=false nếu thiếu hoặc null một trong sku, quantity, amount, hoặc sku rỗng,
-// quantity không phải số nguyên từ 1, amount không hữu hạn. Kiểm tra sự có mặt bằng con trỏ: nếu không, amount
+// quantity không phải số nguyên trong [1, MaxInt32] (2.0 và 2e0 vẫn là số nguyên, như Number.isInteger của bản
+// TypeScript; cột `integer` của Postgres là int32 nên quantity lớn hơn sẽ làm insert lỗi mãi), amount không hữu hạn. Kiểm tra sự có mặt bằng con trỏ: nếu không, amount
 // thiếu sẽ thành 0 và consumer charge 0 (bản TypeScript từ chối vì typeof amount khác number).
 func (e DomainEvent) placed() (OrderPlacedData, bool) {
 	var raw struct {
 		Amount   *float64 `json:"amount"`
 		Sku      *string  `json:"sku"`
-		Quantity *int     `json:"quantity"`
+		Quantity *float64 `json:"quantity"`
 	}
 	if err := json.Unmarshal(e.Data, &raw); err != nil {
 		return OrderPlacedData{}, false
@@ -82,9 +83,9 @@ func (e DomainEvent) placed() (OrderPlacedData, bool) {
 	if raw.Amount == nil || raw.Sku == nil || raw.Quantity == nil {
 		return OrderPlacedData{}, false
 	}
-	d := OrderPlacedData{Amount: *raw.Amount, Sku: *raw.Sku, Quantity: *raw.Quantity}
-	if d.Sku == "" || d.Quantity < 1 || math.IsNaN(d.Amount) || math.IsInf(d.Amount, 0) {
+	q := *raw.Quantity
+	if *raw.Sku == "" || q != math.Trunc(q) || q < 1 || q > math.MaxInt32 || math.IsNaN(*raw.Amount) || math.IsInf(*raw.Amount, 0) {
 		return OrderPlacedData{}, false
 	}
-	return d, true
+	return OrderPlacedData{Amount: *raw.Amount, Sku: *raw.Sku, Quantity: int(q)}, true
 }

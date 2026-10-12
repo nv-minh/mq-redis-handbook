@@ -191,7 +191,7 @@ Chọn API client:
   Chọn Reader thay vì `ConsumerGroup` (lab 06-kafka/lab-02) vì chỉ cần một vòng lặp tuần tự và Reader tự xử lý rebalance, còn assignment của từng member không cần ở đây.
   Handler lỗi thì vòng lặp thử lại đúng message đó sau 200 ms.
 
-Poison event (value không phải JSON, thiếu `eventId`, `type`, `orderId` hay `data`, hoặc `OrderPlaced` thiếu `sku`, `quantity`, `amount` hợp lệ) được log, đếm bằng `consumer_events_total{result="poison"}` rồi commit offset để bỏ qua.
+Poison event (value không phải JSON, thiếu `eventId`, `type`, `orderId` hay `data`, hoặc `OrderPlaced` thiếu `sku`, `quantity`, `amount` hợp lệ, với `quantity` là số nguyên từ 1 tới 2147483647 vì cột `integer` của Postgres là int32, và `2.0` vẫn tính là số nguyên ở cả hai ngôn ngữ) được log, đếm bằng `consumer_events_total{result="poison"}` rồi commit offset để bỏ qua.
 Quyết định này nhằm không để một message hỏng chặn partition mãi mãi.
 Use case không có DLQ topic (YAGNI): nội dung hỏng chỉ nằm trong log (80 ký tự đầu) nên không replay được.
 Loại event lạ (`type` không nằm trong danh sách trên) không phải poison: consumer đếm là `ignored` và đi tiếp, để thêm loại event mới không làm hỏng consumer cũ.

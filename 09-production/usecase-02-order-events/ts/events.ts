@@ -46,7 +46,13 @@ export function parseEvent(value: string | null): DomainEvent | undefined {
     // Consumer cần các trường này để reserve và charge. Thiếu trường thì retry mãi cũng không xử lý được, nên là poison.
     const { sku, quantity, amount } = data as Record<string, unknown>;
     if (typeof sku !== "string" || sku === "") return undefined;
-    if (typeof quantity !== "number" || !Number.isInteger(quantity) || quantity < 1)
+    // Cột `integer` của Postgres là int32: quantity lớn hơn làm insert lỗi mãi và chặn partition.
+    if (
+      typeof quantity !== "number" ||
+      !Number.isInteger(quantity) ||
+      quantity < 1 ||
+      quantity > 2_147_483_647
+    )
       return undefined;
     if (typeof amount !== "number" || !Number.isFinite(amount)) return undefined;
   }

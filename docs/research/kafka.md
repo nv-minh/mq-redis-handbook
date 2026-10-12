@@ -117,12 +117,12 @@ Nguồn: https://raw.githubusercontent.com/segmentio/kafka-go/v0.4.51/balancer.g
 Nguồn: https://raw.githubusercontent.com/segmentio/kafka-go/v0.4.51/writer.go
 Nếu lab trộn producer TypeScript (murmur2) và producer Go thì phải dùng `Murmur2Balancer` ở Go để cùng key rơi vào cùng partition giữa hai ngôn ngữ; dùng `Hash` (FNV-1a) sẽ cho partition khác (suy ra từ mã nguồn hai thuật toán khác nhau, chưa chạy kiểm thử chéo).
 Nguồn: https://raw.githubusercontent.com/segmentio/kafka-go/v0.4.51/balancer.go
-Idempotent producer: broker gán producer ID và khử trùng bằng sequence number gửi kèm mỗi message, đảm bảo việc gửi lại (retry) không tạo bản ghi trùng trong log của partition.
+Idempotent producer: broker gán producer ID và loại bản trùng bằng sequence number gửi kèm mỗi message, đảm bảo việc gửi lại (retry) không tạo bản ghi trùng trong log của partition.
 Nguồn: https://kafka.apache.org/43/design/design/
 Điều kiện của idempotence: `max.in.flight.requests.per.connection <= 5`, `retries > 0`, `acks=all`; với các điều kiện đó thứ tự được giữ.
 Nếu tắt idempotence mà vẫn `max.in.flight > 1` và có retry thì có nguy cơ đảo thứ tự record trong cùng partition.
 Nguồn: https://kafka.apache.org/43/configuration/producer-configs/
-Idempotence chỉ phủ phạm vi một producer session và một partition (producer ID mới sau khi restart nên không khử trùng qua restart), muốn xuyên session phải có `transactional.id` (xem mục transaction).
+Idempotence chỉ phủ phạm vi một producer session và một partition (producer ID mới sau khi restart nên không loại bản trùng qua restart), muốn xuyên session phải có `transactional.id` (xem mục transaction).
 Nguồn: https://kafka.apache.org/43/configuration/producer-configs/
 Batching Java client: `linger.ms` mặc định đổi từ 0 sang 5 ở Kafka 4.0, `batch.size` mặc định 16384 byte, `delivery.timeout.ms` bao trùm retry (khuyến nghị để mặc định `retries` và chỉnh `delivery.timeout.ms`).
 Nguồn: https://kafka.apache.org/43/configuration/producer-configs/
@@ -134,7 +134,7 @@ Với kafka-go: `Writer.RequiredAcks` mặc định `RequireNone` (0, fire-and-f
 `BatchSize` mặc định 100 message, `BatchTimeout` mặc định 1 giây (một lần `WriteMessages` đơn lẻ có thể bị trễ tới 1 giây), `MaxAttempts` mặc định 10, `Async` mặc định `false`.
 `kafka.NewWriter` và `WriterConfig` đã deprecated, và khi dùng chúng thì `RequiredAcks` 0 được hiểu là `RequireAll`.
 Nguồn: https://raw.githubusercontent.com/segmentio/kafka-go/v0.4.51/writer.go
-kafka-go không có API idempotent producer hay transaction trong `Writer` (chưa xác minh tuyệt đối, tôi không thấy tùy chọn nào liên quan trong `writer.go` và README ở v0.4.51); lab Go về exactly-once nên dùng cách khử trùng phía consumer thay vì transaction.
+kafka-go không có API idempotent producer hay transaction trong `Writer` (chưa xác minh tuyệt đối, không thấy tùy chọn nào liên quan trong `writer.go` và README ở v0.4.51); lab Go về exactly-once nên dùng cách loại bản trùng phía consumer thay vì transaction.
 Nguồn: https://raw.githubusercontent.com/segmentio/kafka-go/v0.4.51/writer.go
 Nguồn: https://raw.githubusercontent.com/segmentio/kafka-go/v0.4.51/README.md
 
@@ -324,7 +324,7 @@ Nguồn: https://raw.githubusercontent.com/segmentio/kafka-go/v0.4.51/README.md
 
 ## Lỗi thường gặp ở production
 
-Mỗi mục dưới đây có triệu chứng, nguyên nhân và cách sửa; triệu chứng nào do tôi suy ra từ tài liệu mà chưa chạy thật thì được ghi "chưa xác minh".
+Mỗi mục dưới đây có triệu chứng, nguyên nhân và cách sửa; triệu chứng nào do suy ra từ tài liệu mà chưa chạy thật thì được ghi "chưa xác minh".
 
 ### 1. advertised.listeners sai trong Docker
 
@@ -372,7 +372,7 @@ Nguồn: https://raw.githubusercontent.com/segmentio/kafka-go/v0.4.51/balancer.g
 
 Triệu chứng: crash giữa chừng thì message bị bỏ lỡ (commit trước khi xử lý) hoặc xử lý lặp (xử lý xong nhưng chưa commit).
 Nguyên nhân: auto commit coi record là đã consumed ngay khi `poll()` trả về, và commit theo chu kỳ 5 giây; commit thủ công sau khi xử lý cho at-least-once, nên consumer phải idempotent.
-Cách sửa: tắt auto commit khi xử lý có side effect, commit sau khi xử lý xong, và khử trùng theo khóa nghiệp vụ; với kafka-javascript nhớ commit offset + 1 và commit trong `rebalance_cb` khi bị thu hồi partition.
+Cách sửa: tắt auto commit khi xử lý có side effect, commit sau khi xử lý xong, và loại bản trùng theo khóa nghiệp vụ; với kafka-javascript nhớ commit offset + 1 và commit trong `rebalance_cb` khi bị thu hồi partition.
 Nguồn: https://kafka.apache.org/43/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html
 Nguồn: https://github.com/confluentinc/confluent-kafka-javascript/blob/master/INTRODUCTION.md
 
@@ -399,7 +399,7 @@ Nguồn: https://raw.githubusercontent.com/segmentio/kafka-go/v0.4.51/groupbalan
 
 Triệu chứng: record trong cùng partition bị đảo thứ tự hoặc xuất hiện hai lần sau lỗi tạm thời.
 Nguyên nhân: tắt idempotence mà `max.in.flight.requests.per.connection > 1` kèm retry; librdkafka và kafka-javascript mặc định `enable.idempotence=false` (khác Java client 4.x mặc định bật).
-Cách sửa: bật idempotence (`idempotent: true` trong kafka-javascript) với `max.in.flight <= 5` và `acks=all`; kafka-go không có idempotent producer nên phải khử trùng ở consumer.
+Cách sửa: bật idempotence (`idempotent: true` trong kafka-javascript) với `max.in.flight <= 5` và `acks=all`; kafka-go không có idempotent producer nên phải loại bản trùng ở consumer.
 Nguồn: https://kafka.apache.org/43/configuration/producer-configs/
 Nguồn: https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION.md
 Nguồn: https://github.com/confluentinc/confluent-kafka-javascript/blob/master/MIGRATION.md
@@ -447,7 +447,7 @@ Nguồn: https://raw.githubusercontent.com/segmentio/kafka-go/v0.4.51/reader.go
 Triệu chứng: `JoinGroup` hay `CreateTopics` lỗi phiên bản không được hỗ trợ trên broker 4.0 (đã ghi nhận ở kafka-go v0.4.47 với Kafka 4.0.0: "Received request for api with key 11 (JoinGroup) and unsupported version 1"); hướng dẫn cũ dùng `KAFKA_ZOOKEEPER_CONNECT` hay `--zookeeper` không chạy trên 4.x.
 Nguyên nhân: Kafka 4.0 gỡ các phiên bản protocol API cũ và gỡ ZooKeeper mode.
 Cách sửa: dùng kafka-go từ v0.4.48 trở lên (PR "Kafka 4.0 support" nằm trong v0.4.48; lab dùng v0.4.51), và cấu hình KRaft như compose mẫu.
-Cảnh báo chưa xác minh: PR kafka-go ghi chú chưa chạy CI với Kafka 4.0 do vấn đề bộ nhớ, và tôi chưa chạy v0.4.51 với broker 4.3.1, nên lab cần smoke test thật.
+Cảnh báo chưa xác minh: PR kafka-go ghi chú chưa chạy CI với Kafka 4.0 do vấn đề bộ nhớ, và chưa chạy v0.4.51 với broker 4.3.1, nên lab cần smoke test thật.
 Nguồn: https://github.com/segmentio/kafka-go/issues/1378
 Nguồn: https://github.com/segmentio/kafka-go/pull/1384
 Nguồn: https://github.com/segmentio/kafka-go/releases/tag/v0.4.48

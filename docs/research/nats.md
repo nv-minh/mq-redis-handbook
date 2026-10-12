@@ -47,6 +47,7 @@ Nguồn: https://docs.nats.io/reference/jetstream/advisory/nak
 Kiểm tra bằng source server v2.15.0: hằng số là `JSAdvisoryConsumerMsgNakPre = "$JS.EVENT.ADVISORY.CONSUMER.MSG_NAKED"`, nên subject đúng là `MSG_NAKED` (trang reference ghi `MSG_NAK` là sai); `MAX_DELIVERIES` và `MSG_TERMINATED` khớp docs.
 Nguồn: https://github.com/nats-io/nats-server/blob/v2.15.0/server/jetstream_api.go
 Source server v2.15.0 (`hasMaxDeliveries`): khi delivery count của một sequence đạt MaxDeliver, server phát advisory đúng một lần, xóa sequence khỏi pending và đẩy ack floor qua nó (message không bao giờ được giao lại cho consumer đó).
+Đo thực tế trên server 2.15.0 (lab 07-02): sau khi chạm MaxDeliver, `ack_floor` vẫn là 0 và message vẫn còn trong stream, mâu thuẫn với cách đọc source ở trên (nguyên nhân chưa xác minh), nên đừng dựa vào việc ack floor di chuyển.
 Nguồn: https://github.com/nats-io/nats-server/blob/v2.15.0/server/consumer.go
 Backoff là danh sách delay theo từng lần giao; nếu list ngắn hơn MaxDeliver thì dùng lại phần tử cuối.
 Đặt backoff sẽ thay thế AckWait: phần tử đầu tiên vừa là delay trước lần giao lại đầu tiên vừa là ack deadline của lần giao đầu.

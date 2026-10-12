@@ -7,3 +7,7 @@ coverage/
 bin/
 .superpowers/
 .worktrees/
+*.test
+*.out
+.idea/
+.vscode/

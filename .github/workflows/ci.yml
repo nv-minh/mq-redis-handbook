@@ -18,7 +18,7 @@ env:
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -70,7 +70,7 @@ jobs:
       - run: make test-scripts
 
   test-ts:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       # Only the lint job renders diagrams, so skip the Chrome download here.
@@ -96,7 +96,7 @@ jobs:
         if: always()
 
   test-go:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -115,7 +115,7 @@ jobs:
   # Chapter 04 sentinel and cluster labs: the chaos tests stop and restart Redis containers, so they get their own
   # job with both profiles. TypeScript and Go run one after the other because they share the topology.
   test-chaos:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       PUPPETEER_SKIP_DOWNLOAD: "true"

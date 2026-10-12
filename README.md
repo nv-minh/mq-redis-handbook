@@ -39,6 +39,11 @@ Chủ đề 09 là phần tổng hợp: bảng chọn công nghệ Redis, Rabbit
 | 08  | 6 lab                | Lab 01, 03, 04 cần Redis, lab 05 cần Postgres, RabbitMQ và Redis (Redis giữ marker của test chaos), lab 02 và 06 không cần broker |
 | 09  | 4 use case           | Use case 1, 3, 4 cần Redis, use case 2 cần Postgres và Kafka (xem phần Postgres khi port 5432 bị chiếm)                           |
 
+## Tài liệu nghiên cứu
+
+Thư mục [`docs/research`](./docs/research) giữ ghi chú nghiên cứu có nguồn (Redis, RabbitMQ, Kafka, NATS, patterns), là cơ sở của các `theory.md`.
+Thư mục `docs/superpowers` giữ spec và plan thiết kế của repo này.
+
 ## Phiên bản
 
 Phiên bản server lấy từ `infra/docker-compose.yml`, phiên bản runtime và thư viện lấy từ `package.json`, `go.mod` và workflow CI.
@@ -77,6 +82,7 @@ RabbitMQ series 4.3 có community support đến 2026-11-30, nên khi dùng ngo�
 ## Yêu cầu
 
 - Node 22 và pnpm 11 (CI dùng `11.13.1`, lockfile và `pnpm-workspace.yaml` được tạo bằng bản này).
+  Trường `packageManager` trong `package.json` ghim đúng bản này: chạy `corepack enable` rồi `pnpm` tự dùng đúng phiên bản.
 - Go 1.26 trở lên (`go.mod` dùng directive `go 1.26.0`, vì `go-redis` v9.23.0 yêu cầu Go >= 1.26).
   Nếu Go cài sẵn cũ hơn, `GOTOOLCHAIN=auto` (mặc định) tự tải toolchain 1.26 lần chạy đầu.
 - Docker với Compose v2 (image đều multi-arch: Apple Silicon arm64 và amd64).

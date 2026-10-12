@@ -62,7 +62,7 @@ test-ts:
 
 test-go:
 	# -p 1: packages share one Redis, and lab-03-eviction changes its maxmemory settings for a few seconds.
-	go test -p 1 ./...
+	go test -count=1 -p 1 ./...
 
 # Fast loop and CI: everything that runs on the base stack (no sentinel or cluster profile).
 test-fast: test-fast-ts test-fast-go
@@ -71,7 +71,7 @@ test-fast-ts:
 	pnpm exec vitest run $(foreach lab,$(TOPOLOGY_LABS),--exclude '$(lab)/**')
 
 test-fast-go:
-	go test -p 1 $$(go list ./... | grep -v $(foreach lab,$(TOPOLOGY_LABS),-e '/$(lab)/go'))
+	go test -count=1 -p 1 $$(go list ./... | grep -v $(foreach lab,$(TOPOLOGY_LABS),-e '/$(lab)/go'))
 
 # Chaos and topology tests: need `make up PROFILE="sentinel cluster"`. Sequential, they share the topology.
 test-chaos: test-chaos-ts test-chaos-go
@@ -80,7 +80,7 @@ test-chaos-ts:
 	pnpm exec vitest run $(TOPOLOGY_LABS)
 
 test-chaos-go:
-	go test -p 1 $(foreach lab,$(TOPOLOGY_LABS),./$(lab)/...)
+	go test -count=1 -p 1 $(foreach lab,$(TOPOLOGY_LABS),./$(lab)/...)
 
 lint: lint-ts lint-go
 	bash scripts/check-no-sleep.sh

@@ -229,3 +229,8 @@ Những điều dưới đây được cố ý bỏ ra ngoài, mỗi chủ đề
   Bảng chọn công nghệ ở [chủ đề 09](./09-production/theory.md) không xếp hạng throughput vì research không có số đo so sánh.
 - Phần chưa xác minh: mỗi chương ghi rõ điều nào chỉ đọc từ tài liệu hoặc source mà chưa chạy trong lab (ví dụ hành vi worker chết của asynq, chi phí `PUBLISH` theo số subscriber).
 - Vòng đời phiên bản: RabbitMQ series 4.3 hết community support ngày 2026-11-30, và mọi phiên bản trong bảng trên được kiểm tra ngày 2026-10-06.
+
+## Giấy phép
+
+Repo được phát hành theo giấy phép MIT, xem file [LICENSE](./LICENSE).
+Bạn có thể dùng, sửa và phân phối lại cả code lẫn tài liệu, miễn là giữ lại dòng bản quyền.
